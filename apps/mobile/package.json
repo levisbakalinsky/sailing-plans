@@ -1,0 +1,12 @@
+{
+  "name": "@sailing-plans/mobile",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Expo app scaffold comes next (SP-3 / SP-6)\"",
+    "build": "echo \"Expo app scaffold comes next (SP-3 / SP-6)\"",
+    "lint": "echo \"No lint configured yet\"",
+    "test": "echo \"No tests yet\"",
+    "typecheck": "echo \"No typecheck yet\""
+  }
+}

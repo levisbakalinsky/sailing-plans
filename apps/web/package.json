@@ -1,0 +1,12 @@
+{
+  "name": "@sailing-plans/web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Web app scaffold comes next (SP-4)\"",
+    "build": "echo \"Web app scaffold comes next (SP-4)\"",
+    "lint": "echo \"No lint configured yet\"",
+    "test": "echo \"No tests yet\"",
+    "typecheck": "echo \"No typecheck yet\""
+  }
+}
