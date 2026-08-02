@@ -20,7 +20,7 @@ COPY packages/api-contract packages/api-contract
 RUN pnpm --filter @sailing-plans/api-contract build \
   && pnpm --filter @sailing-plans/api db:generate \
   && pnpm --filter @sailing-plans/api build \
-  && pnpm --filter @sailing-plans/api deploy --prod /out
+  && pnpm --filter @sailing-plans/api deploy --prod --legacy /out
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
