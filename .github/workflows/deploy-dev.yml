@@ -181,7 +181,7 @@ jobs:
             rm -f .env.tmp
             chmod 600 .env
             docker compose pull api
-            docker compose up -d api
+            docker compose up -d --remove-orphans api
             docker compose exec -T api npx prisma migrate deploy
             for i in $(seq 1 30); do
               if curl -fsS http://127.0.0.1/health; then
@@ -222,7 +222,7 @@ jobs:
             rm -f .env.tmp
             chmod 600 .env
             docker compose pull web
-            docker compose up -d web
+            docker compose up -d --remove-orphans web
             for i in $(seq 1 30); do
               if curl -fsS -o /dev/null http://127.0.0.1/; then
                 exit 0
@@ -267,7 +267,7 @@ jobs:
           script: |
             set -euo pipefail
             cd /opt/sailing-plans
-            docker compose up -d caddy
+            docker compose up -d --remove-orphans caddy
             # Stop legacy on-box Postgres if present (managed DB is source of truth).
             docker compose rm -sf db 2>/dev/null || true
             for i in $(seq 1 30); do

@@ -156,5 +156,6 @@ jobs:
             fi
             # Remove local compose Postgres leftovers if present.
             docker compose rm -sf db 2>/dev/null || true
-            docker compose up -d api
+            # Restart API with existing image; do not pull :dev (sha tags are used by Deploy Development).
+            docker compose up -d --no-deps --remove-orphans api || docker start sailing-plans-api-1
             curl -fsS http://127.0.0.1/health
