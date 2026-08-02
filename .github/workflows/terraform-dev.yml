@@ -43,10 +43,7 @@ jobs:
       - name: terraform validate
         run: terraform validate
 
-  # Plan/apply require shared remote state (DO Spaces). Enable after
-  # configuring backend.hcl — see infra/terraform/README.md.
   plan:
-    if: ${{ vars.TF_REMOTE_STATE_ENABLED == 'true' }}
     needs: validate
     runs-on: ubuntu-latest
     environment: development
@@ -54,24 +51,31 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.15.8
+
       - name: terraform init
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: |
-          terraform init -backend-config=backend.hcl
+        run: terraform init -backend-config=backend.hcl -input=false
+
       - name: terraform plan
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: terraform plan -input=false -out=tfplan
+        run: |
+          terraform plan -input=false -out=tfplan
+          terraform show -no-color tfplan > "$GITHUB_WORKSPACE/tfplan.txt"
+
       - uses: actions/upload-artifact@v4
         with:
           name: tfplan-dev
-          path: infra/terraform/environments/dev/tfplan
+          path: |
+            infra/terraform/environments/dev/tfplan
+            tfplan.txt
           retention-days: 14

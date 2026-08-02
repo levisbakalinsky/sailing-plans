@@ -47,15 +47,24 @@ terraform apply tfplan
 2. Commit the removal
 3. Prefer remote state (see below)
 
-## Remote state (required for teams)
+## Remote state
 
-Local state is fine for a single operator bootstrap. For shared use:
+Dev state lives in DigitalOcean Spaces:
 
-1. Create a Spaces bucket (e.g. `sailing-plans-tfstate`)
-2. Uncomment `backend "s3" {}` in `environments/dev/versions.tf`
-3. Copy `backend.hcl.example` → `backend.hcl` and fill in
-4. `terraform init -backend-config=backend.hcl -migrate-state`
+- Bucket: `sailing-plans-tfstate` (nyc3)
+- Key: `env/dev/terraform.tfstate`
+- Config: `environments/dev/backend.hcl` (committed; no secrets)
 
+```bash
+export DIGITALOCEAN_TOKEN=...
+export AWS_ACCESS_KEY_ID=...      # Spaces access key
+export AWS_SECRET_ACCESS_KEY=...  # Spaces secret key
+cd environments/dev
+terraform init -backend-config=backend.hcl
+terraform plan
+```
+
+Staging uses `env/staging/terraform.tfstate` (scaffold only until applied).
 ## CI
 
 Workflow: `.github/workflows/terraform-dev.yml`
@@ -63,9 +72,7 @@ Workflow: `.github/workflows/terraform-dev.yml`
 | Stage | When |
 | --- | --- |
 | `fmt` + `validate` | Every PR/push touching Terraform |
-| `plan` | Only when repo variable `TF_REMOTE_STATE_ENABLED=true` (after Spaces backend) |
-
-**Do not** run `plan`/`apply` in CI against empty local state — that diverges from the real environment. Until Spaces remote state is wired, run plan/apply on a trusted operator machine (or enable the gated `plan` job after backend setup).
+| `plan` | Every PR/push (reads Spaces remote state) |
 
 Required GitHub Environment **`development`** secrets:
 
@@ -73,9 +80,13 @@ Required GitHub Environment **`development`** secrets:
 | --- | --- |
 | `DIGITALOCEAN_TOKEN` | Provider auth |
 | `DROPLET_HOST` / `DROPLET_USER` / `DROPLET_SSH_KEY` | App deploy workflows |
-| `SPACES_ACCESS_KEY_ID` / `SPACES_SECRET_ACCESS_KEY` | Remote state (when enabled) |
+| `SPACES_ACCESS_KEY_ID` / `SPACES_SECRET_ACCESS_KEY` | Spaces remote state |
 
 Note: DigitalOcean firewalls allow **max 5 tags**; the module slices accordingly.
+
+### SSH lockdown
+
+Do **not** CIDR-restrict port 22 while deploys use GitHub-hosted runners over SSH. Options later: self-hosted runner on the Droplet, Tailscale/VPN allowlist, or replace SSH deploy with an in-VPC agent.
 
 ## Tagging standard
 

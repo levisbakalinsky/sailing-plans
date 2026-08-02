@@ -10,5 +10,7 @@ ssh_key_name = "sailing-plans-do-deploy"
 owner        = "platform"
 cost_center  = "engineering"
 
-# Tighten in corporate networks, e.g. ["203.0.113.10/32"].
+# Open for GitHub-hosted Actions SSH deploys (key-only).
+# When moving to a self-hosted runner or VPN, replace with e.g.:
+#   ["76.87.105.2/32"]
 allowed_ssh_cidrs = ["0.0.0.0/0", "::/0"]
