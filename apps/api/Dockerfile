@@ -16,10 +16,10 @@ COPY packages/typescript-config ./packages/typescript-config
 RUN pnpm install --frozen-lockfile
 COPY apps/api ./apps/api
 COPY packages/api-contract ./packages/api-contract
+ENV CI=true
 RUN pnpm --filter @sailing-plans/api-contract build \
   && pnpm --filter @sailing-plans/api db:generate \
-  && pnpm --filter @sailing-plans/api build \
-  && pnpm prune --prod
+  && pnpm --filter @sailing-plans/api build
 
 FROM base AS runner
 ENV NODE_ENV=production
