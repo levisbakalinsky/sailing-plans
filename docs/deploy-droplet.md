@@ -11,7 +11,7 @@ Components deploy independently.
 | --- | --- | --- |
 | `build-api` → `deploy-api` | API container | `apps/api/**`, `packages/**`, lockfile |
 | `build-web` → `deploy-web` | Web container | `apps/web/**`, lockfile |
-| `deploy-proxy` | Caddy + compose sync (+ ensures `db`) | `deploy/Caddyfile`, `deploy/docker-compose.yml` |
+| `deploy-proxy` | Caddy + compose sync | `deploy/Caddyfile`, `deploy/docker-compose.yml` |
 
 Manual: Actions → **Deploy Development** → choose `all` / `api` / `web` / `proxy`.
 
@@ -26,6 +26,7 @@ curl -fsSL https://raw.githubusercontent.com/levisbakalinsky/sailing-plans/main/
 ```
 
 3. Ensure `/opt/sailing-plans` has `docker-compose.yml`, `Caddyfile`, and `.env`.
+4. Set `DATABASE_URL` in `.env` to the Terraform output `database_url_private` (managed Postgres). Do not run Postgres on the Droplet.
 
 ## GitHub configuration
 

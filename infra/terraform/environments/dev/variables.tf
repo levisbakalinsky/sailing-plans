@@ -55,3 +55,35 @@ variable "cost_center" {
   type    = string
   default = "engineering"
 }
+
+variable "db_cluster_name" {
+  type    = string
+  default = "sailing-plans-pg-dev"
+}
+
+variable "db_engine_version" {
+  type    = string
+  default = "16"
+}
+
+variable "db_size" {
+  description = "Managed Postgres size slug (DEV default is smallest)."
+  type        = string
+  default     = "db-s-1vcpu-1gb"
+}
+
+variable "db_name" {
+  type    = string
+  default = "sailing_plans"
+}
+
+variable "db_app_user" {
+  type    = string
+  default = "sailing"
+}
+
+variable "db_allowed_ip_addresses" {
+  description = "Extra IPs trusted by the managed DB firewall (ops/migrate)."
+  type        = list(string)
+  default     = []
+}
