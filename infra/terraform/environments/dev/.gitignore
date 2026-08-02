@@ -12,3 +12,6 @@ backend.hcl
 .terraform.tfvars
 *.auto.tfvars
 !terraform.tfvars
+
+tfplan
+*.tfplan
