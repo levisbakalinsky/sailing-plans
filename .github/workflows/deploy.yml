@@ -125,4 +125,14 @@ jobs:
             docker compose pull
             docker compose up -d --remove-orphans
             docker image prune -f
-            curl -fsS --retry 10 --retry-delay 3 http://127.0.0.1/health
+            # Caddy/API need a moment after container start
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1/health; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Health check failed"
+            docker compose ps
+            docker compose logs --tail=80
+            exit 1
