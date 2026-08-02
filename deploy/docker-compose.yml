@@ -1,10 +1,11 @@
-# Production compose for the Droplet — pulls images built by GitHub Actions.
+# Development Droplet stack — images built/pushed by GitHub Actions (Deploy Development).
 services:
   api:
-    image: ${API_IMAGE:-ghcr.io/levisbakalinsky/sailing-plans-api:latest}
+    image: ${API_IMAGE:-ghcr.io/levisbakalinsky/sailing-plans-api:dev}
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      APP_ENV: development
       PORT: "8080"
       DATABASE_URL: ${DATABASE_URL}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-sk_test_replace_me}
@@ -18,10 +19,11 @@ services:
       - internal
 
   web:
-    image: ${WEB_IMAGE:-ghcr.io/levisbakalinsky/sailing-plans-web:latest}
+    image: ${WEB_IMAGE:-ghcr.io/levisbakalinsky/sailing-plans-web:dev}
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      APP_ENV: development
       PORT: "3000"
       HOSTNAME: 0.0.0.0
       API_INTERNAL_URL: http://api:8080
