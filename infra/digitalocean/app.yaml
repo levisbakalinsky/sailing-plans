@@ -1,6 +1,7 @@
 # DigitalOcean App Platform spec for Sailing Plans API (ADR-001).
+# Live app ID: 686ccd25-c616-47c7-8cbf-b28079bd673b
 # Apply via: doctl apps create --spec infra/digitalocean/app.yaml
-# Or update:  doctl apps update <APP_ID> --spec infra/digitalocean/app.yaml
+# Or update:  doctl apps update 686ccd25-c616-47c7-8cbf-b28079bd673b --spec infra/digitalocean/app.yaml
 #
 # Creates:
 # - App Platform service for apps/api (Hono)
@@ -14,9 +15,10 @@ services:
   - name: api
     # Public git clone (works without linking the DO GitHub app).
     # Switch to `github:` + deploy_on_push after connecting GitHub in DO.
+    # Live deploy currently tracks this infra branch until merge; then retarget.
     git:
       repo_clone_url: https://github.com/levisbakalinsky/sailing-plans.git
-      branch: cursor/scaffold-monorepo-api
+      branch: cursor/do-infra-sailing-plans-9c74
     dockerfile_path: apps/api/Dockerfile
     http_port: 8080
     instance_count: 1
