@@ -17,10 +17,14 @@ COPY packages/typescript-config packages/typescript-config
 RUN pnpm install --filter @sailing-plans/api... --frozen-lockfile
 COPY apps/api apps/api
 COPY packages/api-contract packages/api-contract
+# prisma.config.ts requires DATABASE_URL; generate does not connect.
+ENV DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/sailing_plans?schema=public
 RUN pnpm --filter @sailing-plans/api-contract build \
   && pnpm --filter @sailing-plans/api db:generate \
   && pnpm --filter @sailing-plans/api build \
-  && pnpm --filter @sailing-plans/api deploy --prod --legacy /out
+  && pnpm --filter @sailing-plans/api deploy --prod --legacy /out \
+  && cp apps/api/prisma.config.ts /out/prisma.config.ts \
+  && cp -R apps/api/prisma /out/prisma
 
 FROM node:24-bookworm-slim AS runner
 WORKDIR /app
@@ -32,7 +36,6 @@ RUN apt-get update \
   && useradd --system --uid 1001 api
 COPY --from=build --chown=api:api /out/ ./
 COPY --from=build --chown=api:api /app/apps/api/dist ./dist
-COPY --from=build --chown=api:api /app/apps/api/prisma ./prisma
 USER api
 EXPOSE 8080
 CMD ["node", "dist/index.js"]
