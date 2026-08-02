@@ -7,8 +7,9 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=@sailing-plans/api --filter=@sailing-plans/web",
     "dev:api": "turbo run dev --filter=@sailing-plans/api",
+    "dev:web": "turbo run dev --filter=@sailing-plans/web",
     "lint": "turbo run lint",
     "test": "turbo run test",
     "typecheck": "turbo run typecheck",

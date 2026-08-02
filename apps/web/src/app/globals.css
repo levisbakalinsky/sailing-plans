@@ -1,0 +1,60 @@
+:root {
+  --bg: #0b1c2c;
+  --bg-soft: #12324a;
+  --ink: #f4f7fb;
+  --muted: #a8c0d4;
+  --accent: #6fbfa8;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  min-height: 100%;
+}
+
+body {
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 600px at 10% -10%, #1d4e6f 0%, transparent 55%),
+    radial-gradient(900px 500px at 100% 0%, #245a3a 0%, transparent 45%),
+    linear-gradient(160deg, var(--bg), var(--bg-soft));
+}
+
+main {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
+}
+
+.panel {
+  width: min(40rem, 100%);
+}
+
+.brand {
+  margin: 0 0 0.75rem;
+  font-size: clamp(2.5rem, 6vw, 4rem);
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+}
+
+.lede {
+  margin: 0 0 1.5rem;
+  color: var(--muted);
+  font-size: 1.05rem;
+  max-width: 28rem;
+}
+
+.status {
+  margin: 0;
+  padding: 0.85rem 1rem;
+  border: 1px solid rgba(244, 247, 251, 0.18);
+  background: rgba(4, 16, 28, 0.35);
+  font-family: "SF Mono", ui-monospace, Menlo, monospace;
+  font-size: 0.9rem;
+}

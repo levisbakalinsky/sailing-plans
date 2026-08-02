@@ -39,21 +39,30 @@ packages/
 ```bash
 pnpm install
 cp apps/api/.env.example apps/api/.env
-# Edit DATABASE_URL in apps/api/.env
+cp apps/web/.env.example apps/web/.env.local
+# Edit DATABASE_URL in apps/api/.env when you need Prisma
 pnpm --filter @sailing-plans/api db:generate
-pnpm dev:api
+pnpm --filter @sailing-plans/api-contract build
+pnpm dev
 ```
 
-Health check: `GET http://localhost:3001/health`
+- API: [http://localhost:3001/health](http://localhost:3001/health)
+- Web: [http://localhost:3000](http://localhost:3000)
 
 ## Scripts
 
 | Command | Description |
 | --- | --- |
+| `pnpm dev` | Run API + web locally |
 | `pnpm dev:api` | Run API in watch mode |
+| `pnpm dev:web` | Run web in watch mode |
 | `pnpm build` | Build all packages |
 | `pnpm typecheck` | Typecheck all packages |
 | `pnpm test` | Run tests |
+
+## Deploy
+
+DigitalOcean Droplet via GitHub Actions (Docker Compose + GHCR): see [docs/deploy-droplet.md](docs/deploy-droplet.md).
 
 ## Linear
 
