@@ -63,7 +63,7 @@ variable "db_cluster_name" {
 
 variable "db_engine_version" {
   type    = string
-  default = "16"
+  default = "18"
 }
 
 variable "db_size" {

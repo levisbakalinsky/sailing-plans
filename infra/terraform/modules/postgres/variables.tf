@@ -18,7 +18,7 @@ variable "region" {
 variable "engine_version" {
   description = "Postgres major version."
   type        = string
-  default     = "16"
+  default     = "18"
 }
 
 variable "size" {

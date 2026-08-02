@@ -16,7 +16,7 @@ cost_center  = "engineering"
 allowed_ssh_cidrs = ["0.0.0.0/0", "::/0"]
 
 db_cluster_name   = "sailing-plans-pg-dev"
-db_engine_version = "16"
+db_engine_version = "18"
 db_size           = "db-s-1vcpu-1gb"
 db_name           = "sailing_plans"
 db_app_user       = "sailing"
