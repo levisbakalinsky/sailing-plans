@@ -95,6 +95,7 @@ Do **not** CIDR-restrict port 22 while deploys use GitHub-hosted runners over SS
 - App DB/user: `sailing_plans` / `sailing`
 - Trusted sources: Droplet ID (private network). Optionally set `db_allowed_ip_addresses` for laptop migrates.
 - Droplet `DATABASE_URL`: `terraform output -raw database_url_private`
+- After first create, grant app ownership (Postgres 15+): run `deploy/db-grant-app-user.sql` as `doadmin` on `sailing_plans` (from the Droplet over the private host), then `docker compose exec api npx prisma migrate deploy`
 
 ## Tagging standard
 
