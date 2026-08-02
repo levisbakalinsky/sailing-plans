@@ -1,0 +1,23 @@
+{
+  "name": "@sailing-plans/api-contract",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./openapi.json": "./openapi.json"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo \"No lint configured yet\"",
+    "test": "echo \"No tests yet\""
+  },
+  "devDependencies": {
+    "@sailing-plans/typescript-config": "workspace:*",
+    "typescript": "^5.9.2"
+  }
+}

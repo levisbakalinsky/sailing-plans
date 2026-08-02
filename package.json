@@ -1,0 +1,23 @@
+{
+  "name": "sailing-plans",
+  "private": true,
+  "packageManager": "pnpm@11.18.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --filter=@sailing-plans/api --filter=@sailing-plans/web",
+    "dev:api": "turbo run dev --filter=@sailing-plans/api",
+    "dev:web": "turbo run dev --filter=@sailing-plans/web",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "typecheck": "turbo run typecheck",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.6.2",
+    "turbo": "^2.5.5",
+    "typescript": "^5.9.2"
+  }
+}
