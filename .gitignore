@@ -41,4 +41,3 @@ apps/mobile/dist
 *.tfplan
 crash.log
 crash.*.log
-backend.hcl
