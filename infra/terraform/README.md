@@ -91,7 +91,7 @@ Do **not** CIDR-restrict port 22 while deploys use GitHub-hosted runners over SS
 
 ## Managed Postgres (dev)
 
-- Cluster: `sailing-plans-pg-dev` (`db-s-1vcpu-1gb`, Postgres 16, same VPC as Droplet)
+- Cluster: `sailing-plans-pg-dev` (`db-s-1vcpu-1gb`, Postgres 18, same VPC as Droplet)
 - App DB/user: `sailing_plans` / `sailing`
 - Trusted sources: Droplet ID (private network). Optionally set `db_allowed_ip_addresses` for laptop migrates.
 - Droplet `DATABASE_URL`: `terraform output -raw database_url_private`
