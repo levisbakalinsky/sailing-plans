@@ -4,13 +4,21 @@ Aligned with **ADR-001** (Linear): Hono API on DigitalOcean App Platform, Postgr
 
 ## Resources
 
-| Resource | Name | Notes |
-| --- | --- | --- |
-| App Platform app | `sailing-plans-api` | Serves `apps/api` (Hono) |
-| Managed PostgreSQL (dev) | `sailing-plans-db` | App-attached DBaaS, smallest practical MVP size |
-| Region | `nyc` | New York / closest available |
+| Resource | Name | ID / URL | Notes |
+| --- | --- | --- | --- |
+| App Platform app | `sailing-plans-api` | `686ccd25-c616-47c7-8cbf-b28079bd673b` | Serves `apps/api` (Hono) |
+| Managed PostgreSQL (dev) | `sailing-plans-db` | component `sailing-plans-db` (cluster_name same) | App-attached DBaaS, smallest practical MVP size |
+| Region | `nyc` | NYC data centers (`nyc1` / `nyc3`) | Closest available to NYC |
+| App size | `basic-xxs` × 1 | — | Smallest practical App Platform instance |
+| Dashboard | — | https://cloud.digitalocean.com/apps/686ccd25-c616-47c7-8cbf-b28079bd673b | Control panel |
+
+Live default URL is shown on the app Overview once the first deployment finishes (`*.ondigitalocean.app`).
 
 App Spec (source of truth in repo): [`infra/digitalocean/app.yaml`](../infra/digitalocean/app.yaml)
+
+### Source binding note
+
+The live app was created with a **public git clone URL** because the DigitalOcean account is not yet linked to GitHub (`GitHub user not authenticated`). After connecting GitHub in the DO control panel, switch the service source to `github:` with `deploy_on_push: true` (see comments in the App Spec).
 
 ## Connection / environment variables
 

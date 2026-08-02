@@ -12,10 +12,11 @@ region: nyc
 
 services:
   - name: api
-    github:
-      repo: levisbakalinsky/sailing-plans
+    # Public git clone (works without linking the DO GitHub app).
+    # Switch to `github:` + deploy_on_push after connecting GitHub in DO.
+    git:
+      repo_clone_url: https://github.com/levisbakalinsky/sailing-plans.git
       branch: cursor/scaffold-monorepo-api
-      deploy_on_push: true
     dockerfile_path: apps/api/Dockerfile
     http_port: 8080
     instance_count: 1
