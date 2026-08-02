@@ -1,66 +1,46 @@
-# Deploy to a DigitalOcean Droplet (GitHub Actions)
+# Deploy Development Droplet
 
-CI builds `api` and `web` images, pushes them to GHCR, then SSHs into the Droplet and runs `docker compose up`.
+Development environment on a DigitalOcean Droplet.
+
+- **Infrastructure** (Droplet, firewall, tags): Terraform — see [`infra/terraform/README.md`](../infra/terraform/README.md)
+- **Application** (API / web / proxy containers): GitHub Actions below
+
+Components deploy independently.
+
+| Job | Deploys | Triggers on push when… |
+| --- | --- | --- |
+| `build-api` → `deploy-api` | API container | `apps/api/**`, `packages/**`, lockfile |
+| `build-web` → `deploy-web` | Web container | `apps/web/**`, lockfile |
+| `deploy-proxy` | Caddy + compose sync (+ ensures `db`) | `deploy/Caddyfile`, `deploy/docker-compose.yml` |
+
+Manual: Actions → **Deploy Development** → choose `all` / `api` / `web` / `proxy`.
 
 ## One-time Droplet setup
 
-1. Create an Ubuntu 24.04 Droplet (e.g. `s-2vcpu-4gb` in `nyc1`) with your SSH key.
-2. As root:
+1. Ubuntu 24.04 Droplet with SSH key (current: `sailing-plans` in `nyc1`).
+2. Bootstrap Docker:
 
 ```bash
+# copy and run deploy/bootstrap.sh as root, or:
 curl -fsSL https://raw.githubusercontent.com/levisbakalinsky/sailing-plans/main/deploy/bootstrap.sh | bash
-# or copy deploy/bootstrap.sh up and run it
 ```
 
-3. Place compose assets (the workflow also copies these on every deploy):
-
-```bash
-# from your laptop, after first bootstrap
-scp deploy/docker-compose.yml deploy/Caddyfile root@DROPLET_IP:/opt/sailing-plans/
-```
-
-4. Edit secrets on the server:
-
-```bash
-nano /opt/sailing-plans/.env
-chmod 600 /opt/sailing-plans/.env
-```
+3. Ensure `/opt/sailing-plans` has `docker-compose.yml`, `Caddyfile`, and `.env`.
 
 ## GitHub configuration
 
-Create a GitHub Environment named **`production`** on the repo, and add these secrets:
+Environment: **`development`** (not production).
 
 | Secret | Value |
 | --- | --- |
-| `DROPLET_HOST` | Droplet public IP or hostname |
-| `DROPLET_USER` | `root` (or a deploy user in the `docker` group) |
-| `DROPLET_SSH_KEY` | Private key that can SSH to the Droplet |
+| `DROPLET_HOST` | Droplet public IP |
+| `DROPLET_USER` | `root` (or deploy user in `docker` group) |
+| `DROPLET_SSH_KEY` | Private key for that user |
 
-Repo/workflow also uses `GITHUB_TOKEN` (automatic) to push/pull GHCR images.
-
-After the first successful image push, confirm the GHCR packages `sailing-plans-api` and `sailing-plans-web` are visible to the Actions token (link to this repo; public or internal is simplest).
-
-## Deploy
-
-- Push to `main`, or
-- Actions → **Deploy Droplet** → **Run workflow**
-
-The workflow:
-
-1. Builds and pushes `ghcr.io/<owner>/sailing-plans-api:<sha>` and `-web:<sha>` (+ `latest`)
-2. Copies `deploy/docker-compose.yml` + `Caddyfile` to `/opt/sailing-plans`
-3. Logs the Droplet into GHCR, pulls, restarts, curls `http://127.0.0.1/health`
+Images: `ghcr.io/<owner>/sailing-plans-api:dev` and `-web:dev` (plus sha tags).
 
 ## URLs
 
 - Web: `http://<droplet-ip>/`
 - API health: `http://<droplet-ip>/health`
-- API under prefix: `http://<droplet-ip>/api/health`
-
-## Local compose (optional)
-
-From the repo root (build on your machine, not GHCR):
-
-```bash
-docker compose up --build
-```
+- API prefix: `http://<droplet-ip>/api/health`

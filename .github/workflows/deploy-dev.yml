@@ -1,0 +1,278 @@
+name: Deploy Development
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/**"
+      - "apps/web/**"
+      - "packages/**"
+      - "deploy/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-dev.yml"
+  workflow_dispatch:
+    inputs:
+      component:
+        description: Which component to deploy
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - api
+          - web
+          - proxy
+
+concurrency:
+  group: deploy-dev-${{ github.event.inputs.component || 'auto' }}
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sailing-plans
+  APP_DIR: /opt/sailing-plans
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.select.outputs.api }}
+      web: ${{ steps.select.outputs.web }}
+      proxy: ${{ steps.select.outputs.proxy }}
+    steps:
+      - name: Checkout
+        if: github.event_name == 'push'
+        uses: actions/checkout@v4
+
+      - name: Detect path changes
+        if: github.event_name == 'push'
+        id: filter
+        uses: dorny/paths-filter@v3
+        with:
+          filters: |
+            api:
+              - 'apps/api/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+            web:
+              - 'apps/web/**'
+              - 'pnpm-lock.yaml'
+            proxy:
+              - 'deploy/Caddyfile'
+              - 'deploy/docker-compose.yml'
+              - 'deploy/bootstrap.sh'
+
+      - name: Resolve components
+        id: select
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            component="${{ github.event.inputs.component }}"
+            api=false; web=false; proxy=false
+            case "$component" in
+              all) api=true; web=true; proxy=true ;;
+              api) api=true ;;
+              web) web=true ;;
+              proxy) proxy=true ;;
+            esac
+          else
+            api=${{ steps.filter.outputs.api || 'false' }}
+            web=${{ steps.filter.outputs.web || 'false' }}
+            proxy=${{ steps.filter.outputs.proxy || 'false' }}
+          fi
+          echo "api=$api" >> "$GITHUB_OUTPUT"
+          echo "web=$web" >> "$GITHUB_OUTPUT"
+          echo "proxy=$proxy" >> "$GITHUB_OUTPUT"
+          echo "Deploy selection → api=$api web=$web proxy=$proxy"
+
+  build-api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: |
+          sha_tag="${GITHUB_SHA::12}"
+          echo "image=${IMAGE_PREFIX}-api:${sha_tag}" >> "$GITHUB_OUTPUT"
+          echo "latest=${IMAGE_PREFIX}-api:dev" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.latest }}
+          cache-from: type=gha,scope=api-dev
+          cache-to: type=gha,mode=max,scope=api-dev
+
+  build-web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: |
+          sha_tag="${GITHUB_SHA::12}"
+          echo "image=${IMAGE_PREFIX}-web:${sha_tag}" >> "$GITHUB_OUTPUT"
+          echo "latest=${IMAGE_PREFIX}-web:dev" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/web/Dockerfile
+          push: true
+          build-args: |
+            NEXT_PUBLIC_API_URL=/api
+          tags: |
+            ${{ steps.meta.outputs.image }}
+            ${{ steps.meta.outputs.latest }}
+          cache-from: type=gha,scope=web-dev
+          cache-to: type=gha,mode=max,scope=web-dev
+
+  deploy-api:
+    needs: [changes, build-api]
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Deploy API container
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          API_IMAGE: ${{ needs.build-api.outputs.image }}
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          envs: GITHUB_TOKEN,GITHUB_ACTOR,API_IMAGE
+          script: |
+            set -euo pipefail
+            cd /opt/sailing-plans
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            grep -vE '^API_IMAGE=' .env > .env.tmp || true
+            { cat .env.tmp; echo "API_IMAGE=${API_IMAGE}"; } > .env
+            rm -f .env.tmp
+            chmod 600 .env
+            docker compose pull api
+            docker compose up -d api
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1/health; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "API health check failed"
+            docker compose logs --tail=80 api
+            exit 1
+
+  deploy-web:
+    needs: [changes, build-web]
+    if: needs.changes.outputs.web == 'true'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - name: Deploy Web container
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          WEB_IMAGE: ${{ needs.build-web.outputs.image }}
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          envs: GITHUB_TOKEN,GITHUB_ACTOR,WEB_IMAGE
+          script: |
+            set -euo pipefail
+            cd /opt/sailing-plans
+            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+            grep -vE '^WEB_IMAGE=' .env > .env.tmp || true
+            { cat .env.tmp; echo "WEB_IMAGE=${WEB_IMAGE}"; } > .env
+            rm -f .env.tmp
+            chmod 600 .env
+            docker compose pull web
+            docker compose up -d web
+            for i in $(seq 1 30); do
+              if curl -fsS -o /dev/null http://127.0.0.1/; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Web health check failed"
+            docker compose logs --tail=80 web
+            exit 1
+
+  deploy-proxy:
+    needs: changes
+    if: needs.changes.outputs.proxy == 'true'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout deploy assets
+        uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            deploy
+          sparse-checkout-cone-mode: true
+
+      - name: Sync compose + Caddyfile
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          source: "deploy/docker-compose.yml,deploy/Caddyfile"
+          target: /opt/sailing-plans
+          strip_components: 1
+
+      - name: Reload proxy stack
+        uses: appleboy/ssh-action@v1.2.0
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/sailing-plans
+            docker compose up -d caddy db
+            for i in $(seq 1 30); do
+              if curl -fsS http://127.0.0.1/health >/dev/null; then
+                exit 0
+              fi
+              sleep 2
+            done
+            echo "Proxy health check failed"
+            docker compose logs --tail=80 caddy
+            exit 1

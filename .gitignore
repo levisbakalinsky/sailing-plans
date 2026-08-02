@@ -33,3 +33,12 @@ apps/api/prisma/*.db-journal
 # Expo
 apps/mobile/.expo
 apps/mobile/dist
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+crash.log
+crash.*.log
+backend.hcl

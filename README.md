@@ -60,9 +60,12 @@ pnpm dev
 | `pnpm typecheck` | Typecheck all packages |
 | `pnpm test` | Run tests |
 
-## Deploy
+## Deploy (development)
 
-DigitalOcean Droplet via GitHub Actions (Docker Compose + GHCR): see [docs/deploy-droplet.md](docs/deploy-droplet.md).
+| Layer | Tool | Docs |
+| --- | --- | --- |
+| Infra (Droplet, firewall) | Terraform | [infra/terraform/README.md](infra/terraform/README.md) |
+| Apps (API / web / proxy) | GitHub Actions | [docs/deploy-droplet.md](docs/deploy-droplet.md) |
 
 ## Linear
 
