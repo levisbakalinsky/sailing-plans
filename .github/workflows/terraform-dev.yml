@@ -37,7 +37,7 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -59,7 +59,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -81,7 +81,7 @@ jobs:
           terraform plan -input=false -out=tfplan
           terraform show -no-color tfplan > "$GITHUB_WORKSPACE/tfplan.txt"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: tfplan-dev
           path: |
@@ -97,7 +97,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: hashicorp/setup-terraform@v3
         with:
@@ -131,7 +131,7 @@ jobs:
 
       - name: Wire Droplet DATABASE_URL and restart API
         if: inputs.wire_droplet_database_url
-        uses: appleboy/ssh-action@v1.2.0
+        uses: appleboy/ssh-action@v1.2.5
         env:
           DATABASE_URL: ${{ steps.dburl.outputs.url }}
         with:

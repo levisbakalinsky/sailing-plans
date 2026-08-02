@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:22-bookworm-slim AS base
+FROM node:24-bookworm-slim AS base
 WORKDIR /app
 ENV PNPM_HOME=/pnpm
 ENV PATH=$PNPM_HOME:$PATH
@@ -16,7 +16,7 @@ RUN pnpm install --filter @sailing-plans/web... --frozen-lockfile
 COPY apps/web apps/web
 RUN pnpm --filter @sailing-plans/web build
 
-FROM node:22-bookworm-slim AS runner
+FROM node:24-bookworm-slim AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000

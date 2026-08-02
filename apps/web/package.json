@@ -11,15 +11,15 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "next": "^15.5.2",
-    "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "next": "^15.5.22",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
     "@sailing-plans/typescript-config": "workspace:*",
-    "@types/node": "^24.3.0",
-    "@types/react": "^19.1.12",
-    "@types/react-dom": "^19.1.9",
-    "typescript": "^5.9.2"
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.4",
+    "typescript": "^5.9.3"
   }
 }

@@ -41,3 +41,6 @@ apps/mobile/dist
 *.tfplan
 crash.log
 crash.*.log
+
+# TypeScript
+*.tsbuildinfo
