@@ -55,6 +55,10 @@ Health check: `GET http://localhost:3001/health`
 | `pnpm typecheck` | Typecheck all packages |
 | `pnpm test` | Run tests |
 
+## Infrastructure
+
+DigitalOcean App Platform + Managed PostgreSQL (dev): see [`docs/infrastructure.md`](docs/infrastructure.md) and [`infra/digitalocean/app.yaml`](infra/digitalocean/app.yaml).
+
 ## Linear
 
 Team: **Sailing Plans** (`SP`)  

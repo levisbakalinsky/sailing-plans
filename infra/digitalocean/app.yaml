@@ -1,0 +1,62 @@
+# DigitalOcean App Platform spec for Sailing Plans API (ADR-001).
+# Apply via: doctl apps create --spec infra/digitalocean/app.yaml
+# Or update:  doctl apps update <APP_ID> --spec infra/digitalocean/app.yaml
+#
+# Creates:
+# - App Platform service for apps/api (Hono)
+# - Managed PostgreSQL (dev) cluster component: sailing-plans-db
+# Region: nyc (NYC). Instance: smallest practical MVP size (basic-xxs).
+
+name: sailing-plans-api
+region: nyc
+
+services:
+  - name: api
+    github:
+      repo: levisbakalinsky/sailing-plans
+      branch: cursor/scaffold-monorepo-api
+      deploy_on_push: true
+    dockerfile_path: apps/api/Dockerfile
+    http_port: 8080
+    instance_count: 1
+    instance_size_slug: basic-xxs
+    health_check:
+      http_path: /health
+      initial_delay_seconds: 10
+      period_seconds: 10
+      timeout_seconds: 5
+      success_threshold: 1
+      failure_threshold: 6
+    envs:
+      - key: NODE_ENV
+        scope: RUN_TIME
+        value: production
+      - key: PORT
+        scope: RUN_TIME
+        value: "8080"
+      # Bound to the App Platform managed DB component below.
+      - key: DATABASE_URL
+        scope: RUN_TIME
+        type: SECRET
+        value: ${sailing-plans-db.DATABASE_URL}
+      # Clerk — replace placeholder secrets in the DO dashboard after create.
+      - key: CLERK_SECRET_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: sk_test_replace_me
+      - key: CLERK_PUBLISHABLE_KEY
+        scope: RUN_TIME
+        type: SECRET
+        value: pk_test_replace_me
+      # Cloudflare (edge/CDN) — reserved for later; not required for API MVP boot.
+      # - key: CLOUDFLARE_API_TOKEN
+      #   scope: RUN_TIME
+      #   type: SECRET
+      #   value: replace_me
+
+databases:
+  - name: sailing-plans-db
+    engine: PG
+    version: "16"
+    production: false
+    cluster_name: sailing-plans-db
