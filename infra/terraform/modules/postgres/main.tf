@@ -29,6 +29,11 @@ resource "digitalocean_database_db" "app" {
 resource "digitalocean_database_user" "app" {
   cluster_id = digitalocean_database_cluster.this.id
   name       = var.app_user
+
+  # DO may return empty settings blocks after engine upgrades; avoid churn.
+  lifecycle {
+    ignore_changes = [settings]
+  }
 }
 
 resource "digitalocean_database_firewall" "this" {
