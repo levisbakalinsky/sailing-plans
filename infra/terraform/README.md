@@ -8,9 +8,10 @@ Corporate-style Infrastructure-as-Code for Sailing Plans on DigitalOcean.
 infra/terraform/
   modules/
     app_host/          # Reusable Droplet + cloud firewall
+    postgres/          # Managed Postgres + DB firewall
   environments/
     dev/               # Development root module (this env)
-    # staging/         # Add when needed (copy from dev)
+    staging/           # Scaffold only (not applied)
     # prod/            # Add when needed (copy from dev; stricter SSH CIDRs)
 ```
 
@@ -18,7 +19,7 @@ infra/terraform/
 
 | Concern | Tool |
 | --- | --- |
-| Droplet, firewall, VPC attachment, tags | Terraform |
+| Droplet, managed Postgres, firewalls, VPC, tags | Terraform |
 | Container image build + `docker compose` deploy | GitHub Actions (`Deploy Development`) |
 
 ## Prerequisites
@@ -88,6 +89,13 @@ Note: DigitalOcean firewalls allow **max 5 tags**; the module slices accordingly
 
 Do **not** CIDR-restrict port 22 while deploys use GitHub-hosted runners over SSH. Options later: self-hosted runner on the Droplet, Tailscale/VPN allowlist, or replace SSH deploy with an in-VPC agent.
 
+## Managed Postgres (dev)
+
+- Cluster: `sailing-plans-pg-dev` (`db-s-1vcpu-1gb`, Postgres 16, same VPC as Droplet)
+- App DB/user: `sailing_plans` / `sailing`
+- Trusted sources: Droplet ID (private network). Optionally set `db_allowed_ip_addresses` for laptop migrates.
+- Droplet `DATABASE_URL`: `terraform output -raw database_url_private`
+
 ## Tagging standard
 
 All resources receive:
@@ -95,7 +103,7 @@ All resources receive:
 - `sailing-plans` (project)
 - `dev` / `staging` / `prod` (environment)
 - `managed-by:terraform`
-- `role:app-host`
+- `role:app-host` or `role:postgres`
 - `owner:*`
 - `cost-center:*`
 

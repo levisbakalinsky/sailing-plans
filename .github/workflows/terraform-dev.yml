@@ -11,6 +11,15 @@ on:
       - "infra/terraform/**"
       - ".github/workflows/terraform-dev.yml"
   workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply the plan after validate (creates/updates DO resources)"
+        type: boolean
+        default: false
+      wire_droplet_database_url:
+        description: "After apply, write database_url_private into Droplet .env and restart api"
+        type: boolean
+        default: false
 
 concurrency:
   group: terraform-dev
@@ -79,3 +88,73 @@ jobs:
             infra/terraform/environments/dev/tfplan
             tfplan.txt
           retention-days: 14
+
+  apply:
+    if: github.event_name == 'workflow_dispatch' && inputs.apply
+    needs: plan
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.15.8
+
+      - name: terraform init
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: terraform init -backend-config=backend.hcl -input=false
+
+      - name: terraform apply
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: terraform apply -input=false -auto-approve
+
+      - name: Export private DATABASE_URL
+        if: inputs.wire_droplet_database_url
+        id: dburl
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: |
+          url="$(terraform output -raw database_url_private)"
+          echo "::add-mask::$url"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Wire Droplet DATABASE_URL and restart API
+        if: inputs.wire_droplet_database_url
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          DATABASE_URL: ${{ steps.dburl.outputs.url }}
+        with:
+          host: ${{ secrets.DROPLET_HOST }}
+          username: ${{ secrets.DROPLET_USER }}
+          key: ${{ secrets.DROPLET_SSH_KEY }}
+          envs: DATABASE_URL
+          script: |
+            set -euo pipefail
+            cd /opt/sailing-plans
+            touch .env
+            if grep -q '^DATABASE_URL=' .env; then
+              # Replace existing DATABASE_URL without printing the value.
+              awk -v url="$DATABASE_URL" '
+                BEGIN { done=0 }
+                /^DATABASE_URL=/ { print "DATABASE_URL=" url; done=1; next }
+                { print }
+                END { if (!done) print "DATABASE_URL=" url }
+              ' .env > .env.tmp && mv .env.tmp .env
+            else
+              printf 'DATABASE_URL=%s\n' "$DATABASE_URL" >> .env
+            fi
+            # Remove local compose Postgres leftovers if present.
+            docker compose rm -sf db 2>/dev/null || true
+            docker compose up -d api
+            curl -fsS http://127.0.0.1/health

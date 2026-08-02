@@ -1,4 +1,5 @@
 # Development Droplet stack — images built/pushed by GitHub Actions (Deploy Development).
+# Postgres is DigitalOcean Managed DB (Terraform); not run on the Droplet.
 services:
   api:
     image: ${API_IMAGE:-ghcr.io/levisbakalinsky/sailing-plans-api:dev}
@@ -10,9 +11,6 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY:-sk_test_replace_me}
       CLERK_PUBLISHABLE_KEY: ${CLERK_PUBLISHABLE_KEY:-pk_test_replace_me}
-    depends_on:
-      db:
-        condition: service_healthy
     expose:
       - "8080"
     networks:
@@ -51,29 +49,9 @@ services:
     networks:
       - internal
 
-  db:
-    image: postgres:16-alpine
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: sailing_plans
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d sailing_plans"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-    expose:
-      - "5432"
-    networks:
-      - internal
-
 networks:
   internal:
 
 volumes:
-  postgres_data:
   caddy_data:
   caddy_config:

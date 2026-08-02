@@ -14,3 +14,12 @@ cost_center  = "engineering"
 # When moving to a self-hosted runner or VPN, replace with e.g.:
 #   ["76.87.105.2/32"]
 allowed_ssh_cidrs = ["0.0.0.0/0", "::/0"]
+
+db_cluster_name   = "sailing-plans-pg-dev"
+db_engine_version = "16"
+db_size           = "db-s-1vcpu-1gb"
+db_name           = "sailing_plans"
+db_app_user       = "sailing"
+# Optional: add your public IP to run prisma migrate from a laptop.
+# db_allowed_ip_addresses = ["1.2.3.4"]
+db_allowed_ip_addresses = []
