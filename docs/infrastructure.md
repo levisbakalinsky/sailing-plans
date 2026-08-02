@@ -7,12 +7,12 @@ Aligned with **ADR-001** (Linear): Hono API on DigitalOcean App Platform, Postgr
 | Resource | Name | ID / URL | Notes |
 | --- | --- | --- | --- |
 | App Platform app | `sailing-plans-api` | `686ccd25-c616-47c7-8cbf-b28079bd673b` | Serves `apps/api` (Hono) |
-| Managed PostgreSQL (dev) | `sailing-plans-db` | component `sailing-plans-db` (cluster_name same) | App-attached DBaaS, smallest practical MVP size |
+| Live URL | — | https://sailing-plans-api-ar2au.ondigitalocean.app | Health: `/health` |
+| Managed PostgreSQL (dev) | `sailing-plans-db` | component / cluster `sailing-plans-db` (PG 16) | App-attached DBaaS, smallest practical MVP size |
 | Region | `nyc` | NYC data centers (`nyc1` / `nyc3`) | Closest available to NYC |
 | App size | `basic-xxs` × 1 | — | Smallest practical App Platform instance |
+| Project | — | `d212f672-dc1f-42b1-ac19-98fadd8c6fe0` | DO project assignment |
 | Dashboard | — | https://cloud.digitalocean.com/apps/686ccd25-c616-47c7-8cbf-b28079bd673b | Control panel |
-
-Live default URL is shown on the app Overview once the first deployment finishes (`*.ondigitalocean.app`).
 
 App Spec (source of truth in repo): [`infra/digitalocean/app.yaml`](../infra/digitalocean/app.yaml)
 
