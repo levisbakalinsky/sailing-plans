@@ -1,18 +1,21 @@
-# DigitalOcean Spaces (S3-compatible) remote state — recommended for teams.
+# Non-secret backend settings are committed as backend.hcl.
+# Provide Spaces credentials in the environment:
+#   export AWS_ACCESS_KEY_ID=...
+#   export AWS_SECRET_ACCESS_KEY=...
 #
-# 1. Create a Spaces bucket (e.g. sailing-plans-tfstate) in a region.
-# 2. Create Spaces access keys; store in 1Password / CI secrets.
-# 3. Uncomment the backend block in versions.tf.
-# 4. Copy this file to backend.hcl (gitignored) and fill values.
-# 5. terraform init -backend-config=backend.hcl -migrate-state
-#
-# bucket                 = "sailing-plans-tfstate"
-# key                    = "dev/terraform.tfstate"
-# region                 = "us-east-1"
-# endpoint               = "https://nyc3.digitaloceanspaces.com"
-# skip_credentials_validation = true
-# skip_metadata_api_check     = true
-# skip_region_validation      = true
-# skip_requesting_account_id  = true
-# skip_s3_checksum            = true
-# use_path_style              = true
+# terraform init -backend-config=backend.hcl -migrate-state
+
+bucket = "sailing-plans-tfstate"
+key    = "env/dev/terraform.tfstate"
+region = "us-east-1"
+
+endpoints = {
+  s3 = "https://nyc3.digitaloceanspaces.com"
+}
+
+skip_credentials_validation = true
+skip_metadata_api_check     = true
+skip_region_validation      = true
+skip_requesting_account_id  = true
+skip_s3_checksum            = true
+use_path_style              = true

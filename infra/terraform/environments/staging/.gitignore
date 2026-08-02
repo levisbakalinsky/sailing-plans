@@ -13,4 +13,3 @@ override.tf.json
 !terraform.tfvars
 tfplan
 *.tfplan
-# backend.hcl is committed (bucket/key/endpoint only). Spaces keys stay in env/CI secrets.
