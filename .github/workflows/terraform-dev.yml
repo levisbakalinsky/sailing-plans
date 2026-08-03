@@ -76,6 +76,15 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         run: terraform init -backend-config=backend.hcl -input=false
 
+      # Mutates remote state; skip on PRs so forks/reviews don't rewrite production state.
+      - name: Migrate state for blue/green (idempotent)
+        if: github.event_name != 'pull_request'
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: bash "${GITHUB_WORKSPACE}/deploy/scripts/tf-state-bluegreen.sh"
+
       - name: terraform plan
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -102,6 +111,10 @@ jobs:
     environment: development
     permissions:
       contents: read
+      actions: read
+      # Set development environment variables/secrets after apply.
+      variables: write
+      secrets: write
     steps:
       - uses: actions/checkout@v7
 
@@ -116,6 +129,13 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         run: terraform init -backend-config=backend.hcl -input=false
 
+      - name: Migrate state for blue/green (idempotent)
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: bash "${GITHUB_WORKSPACE}/deploy/scripts/tf-state-bluegreen.sh"
+
       - name: terraform apply
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -125,16 +145,65 @@ jobs:
           TF_VAR_ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
         run: terraform apply -input=false -auto-approve
 
-      - name: Print pool endpoints
+      - name: Print pool endpoints + wire GitHub variables
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "loadbalancer_ip=$(terraform output -raw loadbalancer_ip)"
-          echo "pool_tag=$(terraform output -raw pool_tag)"
+          set -euo pipefail
+          lb_ip="$(terraform output -raw loadbalancer_ip)"
+          lb_id="$(terraform output -raw loadbalancer_id)"
+          pool_tag="$(terraform output -raw pool_tag)"
+          blue_tag="$(terraform output -raw blue_tag)"
+          green_tag="$(terraform output -raw green_tag)"
+          blue_pool="$(terraform output -raw autoscale_pool_id_blue)"
+          green_pool="$(terraform output -raw autoscale_pool_id_green)"
+          echo "loadbalancer_ip=$lb_ip"
+          echo "loadbalancer_id=$lb_id"
+          echo "pool_tag=$pool_tag blue_tag=$blue_tag green_tag=$green_tag"
+          echo "autoscale_pool_id_blue=$blue_pool"
+          echo "autoscale_pool_id_green=$green_pool"
           echo "health_url=$(terraform output -raw health_url)"
-          echo "Set GitHub secret LOADBALANCER_IP to the load balancer IP above."
+
+          gh variable set LOADBALANCER_ID --env development --body "$lb_id"
+          gh variable set AUTOSCALE_POOL_ID_BLUE --env development --body "$blue_pool"
+          gh variable set AUTOSCALE_POOL_ID_GREEN --env development --body "$green_pool"
+          gh variable set POOL_TAG --env development --body "$pool_tag"
+          gh variable set BLUE_TAG --env development --body "$blue_tag"
+          gh variable set GREEN_TAG --env development --body "$green_tag"
+          gh variable set ACTIVE_COLOR_TAG --env development --body "$blue_tag"
+          gh variable set BASELINE_MIN --env development --body "2"
+          # Keep secret in sync for health checks
+          gh secret set LOADBALANCER_IP --env development --body "$lb_ip"
+
+      - name: Point LB at blue color tag (first cutover)
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y jq
+          chmod +x deploy/scripts/*.sh
+          export LOADBALANCER_ID="$(cd infra/terraform/environments/dev && terraform output -raw loadbalancer_id)"
+          export BLUE_TAG="$(cd infra/terraform/environments/dev && terraform output -raw blue_tag)"
+          # Tag existing shared-tag droplets with blue so LB can attach before template roll finishes.
+          mapfile -t DROPLET_IDS < <(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
+            "https://api.digitalocean.com/v2/droplets?tag_name=$(cd infra/terraform/environments/dev && terraform output -raw pool_tag)&per_page=200" \
+            | jq -r '.droplets[].id')
+          if [[ "${#DROPLET_IDS[@]}" -gt 0 ]]; then
+            resources="$(printf '%s\n' "${DROPLET_IDS[@]}" | jq -R '{resource_id:., resource_type:"droplet"}' | jq -s '{resources:.}')"
+            curl -fsS -X POST \
+              -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
+              -H "Content-Type: application/json" \
+              -d "$resources" \
+              "https://api.digitalocean.com/v2/tags/${BLUE_TAG}/resources" >/dev/null
+            echo "Tagged ${#DROPLET_IDS[@]} droplet(s) with $BLUE_TAG"
+          fi
+          ./deploy/scripts/lb-set-tag.sh "$BLUE_TAG"
 
       - name: Export private DATABASE_URL + REDIS_URL
         if: inputs.wire_pool_database_url

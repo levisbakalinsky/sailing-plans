@@ -1,64 +1,84 @@
-# Deploy Development (Autoscale Pool)
+# Deploy Development (Blue/Green)
 
-Development runs on a DigitalOcean **Droplet Autoscale Pool** behind a **Load Balancer**.
+Development runs on DigitalOcean **Droplet Autoscale Pools** (blue + green) behind one **Load Balancer**.
 
-- **Infrastructure** (pool, LB, firewalls, managed Postgres): Terraform — see [`infra/terraform/README.md`](../infra/terraform/README.md)
-- **Application** (API / web / proxy containers): GitHub Actions below
-- **Bootstrap**: cloud-init on each new pool member installs Docker and starts Compose
+- **Infrastructure** (pools, LB, firewalls, Postgres, Valkey): Terraform — see [`infra/terraform/README.md`](../infra/terraform/README.md)
+- **Migrations**: GitHub Actions **Migrate Development** (separate from deploys)
+- **Application**: GitHub Actions **Deploy Development** (blue/green cutover)
 
-Components deploy independently to **every** Droplet with the pool tag.
+## Order of operations
 
-| Job | Deploys | Triggers on push when… |
-| --- | --- | --- |
-| `build-api` → `deploy-api` | API on all pool hosts + migrate once | `apps/api/**`, `packages/**`, lockfile |
-| `build-web` → `deploy-web` | Web on all pool hosts | `apps/web/**`, lockfile |
-| `deploy-proxy` | Caddy + compose sync on all hosts | `deploy/Caddyfile`, `deploy/docker-compose.yml`, scripts |
+1. If schema changed → run **Migrate Development**
+2. Run **Deploy Development** (builds images, brings up the inactive color, health-checks, flips LB, scales old color to 0)
 
-Manual: Actions → **Deploy Development** → choose `all` / `api` / `web` / `proxy`.
+Do **not** run migrations inside the app deploy.
+
+## Blue/green flow
+
+| Step | What happens |
+| --- | --- |
+| Resolve colors | Read LB `droplet_tag` (blue or green); other color is inactive |
+| Scale inactive | Set inactive pool `min_instances` to baseline (2); wait for healthy hosts |
+| Deploy | Push new images / proxy config **only** to inactive color |
+| Health-check | Require baseline hosts on inactive tag returning `/health` 200 |
+| Cutover | Point LB at inactive color tag |
+| Finalize | Scale previous color `min_instances` → 1 (standby) |
+
+DigitalOcean autoscale pools require `min_instances >= 1`, so the idle color keeps one standby droplet (not zero).
+
+Rollback before cutover: cancel the workflow / leave LB on the active color; scale inactive back to 1.  
+Rollback after cutover: flip LB tag back to the previous color (old fleet still up until finalize).
 
 ## Topology
 
-- Pool tag: `sailing-plans-app-dev-pool` (override with env var `POOL_TAG`)
-- Min / max instances: **2 / 4** (CPU target 0.7)
-- Public entrypoint: Load Balancer IP (not individual Droplet IPs)
-- DB trust: managed Postgres firewall allows the pool **tag**
+| Resource | Tag / ID |
+| --- | --- |
+| Shared (DB/Valkey/firewall) | `sailing-plans-app-dev-pool` |
+| Blue color | `sailing-plans-app-dev-pool-blue` |
+| Green color | `sailing-plans-app-dev-pool-green` |
+| Baseline / max | **2 / 4** per color |
+| Public entry | Load Balancer → active color tag |
 
 ## GitHub configuration
 
 Environment: **`development`**.
 
-| Secret / var | Value |
+| Secret | Purpose |
 | --- | --- |
-| `DIGITALOCEAN_TOKEN` | List Droplets by tag during deploy |
-| `DROPLET_USER` | `root` (or deploy user in `docker` group) |
-| `DROPLET_SSH_KEY` | Private key matching Terraform `ssh_key_name` |
-| `LOADBALANCER_IP` | LB public IP (`terraform output -raw loadbalancer_ip`) |
-| `DROPLET_HOST` | Optional fallback if `LOADBALANCER_IP` unset |
-| `GHCR_PULL_TOKEN` | Optional PAT for Droplet boot GHCR login (`TF_VAR_ghcr_pull_token`). Packages are public; token is a bootstrap fallback. |
-| `POOL_TAG` (optional variable) | Defaults to `sailing-plans-app-dev-pool` |
+| `DIGITALOCEAN_TOKEN` | Autoscale / LB / droplet APIs |
+| `DROPLET_USER` / `DROPLET_SSH_KEY` | SSH deploy |
+| `LOADBALANCER_IP` | Post-cutover health checks |
+| `GHCR_PULL_TOKEN` | Optional Droplet boot pull token |
 
-Images: `ghcr.io/<owner>/sailing-plans-api:dev` and `-web:dev` (plus sha tags).
+| Variable | Purpose |
+| --- | --- |
+| `LOADBALANCER_ID` | LB UUID for tag flip |
+| `AUTOSCALE_POOL_ID_BLUE` / `AUTOSCALE_POOL_ID_GREEN` | Pool UUIDs for scale up/down |
+| `BLUE_TAG` / `GREEN_TAG` | Color tags (defaults match Terraform) |
+| `POOL_TAG` | Shared tag |
+| `BASELINE_MIN` | Default `2` |
+| `ACTIVE_COLOR_TAG` | Updated after cutover (used by Migrate) |
+
+## Manual runs
+
+- Actions → **Migrate Development** → Run workflow  
+- Actions → **Deploy Development** → choose component; optional `skip_cutover` / `finalize`
 
 ## URLs
-
-Public (Cloudflare → LB):
 
 - https://www.sailingplans.com/
 - https://www.sailingplans.com/health
 - https://www.sailingplans.com/api/health
 
-`.net` / `.org` (and www) 301-redirect to `https://www.sailingplans.com`.
-
-Direct LB (ops):
-
-- Web: `http://<loadbalancer-ip>/`
-- API health: `http://<loadbalancer-ip>/health`
+`.net` / `.org` 301 → `www.sailingplans.com`.
 
 ## Local helpers
 
 ```bash
 export DIGITALOCEAN_TOKEN=...
-export POOL_TAG=sailing-plans-app-dev-pool
-./deploy/scripts/pool-hosts.sh          # list public IPs
-./deploy/scripts/ssh-pool.sh -- 'uptime'  # run on every member
+export POOL_TAG=sailing-plans-app-dev-pool-blue   # or -green
+./deploy/scripts/pool-hosts.sh
+./deploy/scripts/ssh-pool.sh -- 'uptime'
+export LOADBALANCER_ID=...
+./deploy/scripts/lb-get-tag.sh
 ```

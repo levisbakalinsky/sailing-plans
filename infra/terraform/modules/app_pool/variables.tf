@@ -55,8 +55,25 @@ variable "cooldown_minutes" {
 }
 
 variable "pool_tag" {
-  description = "Tag applied to pool Droplets and used by the Load Balancer / DB firewall."
+  description = "Shared tag on all color Droplets (DB/Valkey firewall, SSH firewall)."
   type        = string
+}
+
+variable "color_tag" {
+  description = "Blue/green color tag used by the Load Balancer to select the active fleet."
+  type        = string
+}
+
+variable "create_loadbalancer" {
+  description = "Create the regional Load Balancer (only one color module should)."
+  type        = bool
+  default     = true
+}
+
+variable "create_firewall" {
+  description = "Create the shared cloud firewall (only one color module should)."
+  type        = bool
+  default     = true
 }
 
 variable "allowed_ssh_cidrs" {

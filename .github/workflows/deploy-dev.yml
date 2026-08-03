@@ -1,5 +1,7 @@
 name: Deploy Development
 
+# Blue/green application deploy.
+# Run Migrate Development separately before this when schema changes.
 on:
   push:
     branches: [main]
@@ -22,9 +24,16 @@ on:
           - api
           - web
           - proxy
+      finalize:
+        description: After cutover, scale the old color back to standby (1)
+        type: boolean
+        default: true
+      skip_cutover:
+        description: Deploy to inactive color only (no LB flip)
+        type: boolean
+        default: false
 
 concurrency:
-  # One rolling deploy at a time against the shared Droplet pool.
   group: deploy-dev-pool
   cancel-in-progress: false
 
@@ -32,7 +41,13 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sailing-plans
   APP_DIR: /opt/sailing-plans
-  POOL_TAG: sailing-plans-app-dev-pool
+  POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+  BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
+  GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
+  BASELINE_MIN: ${{ vars.BASELINE_MIN || '2' }}
+  LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
+  AUTOSCALE_POOL_ID_BLUE: ${{ vars.AUTOSCALE_POOL_ID_BLUE }}
+  AUTOSCALE_POOL_ID_GREEN: ${{ vars.AUTOSCALE_POOL_ID_GREEN }}
 
 jobs:
   changes:
@@ -86,6 +101,102 @@ jobs:
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "proxy=$proxy" >> "$GITHUB_OUTPUT"
           echo "Deploy selection → api=$api web=$web proxy=$proxy"
+
+  resolve-colors:
+    needs: changes
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.proxy == 'true'
+    runs-on: ubuntu-latest
+    environment: development
+    outputs:
+      active_tag: ${{ steps.colors.outputs.active_tag }}
+      inactive_tag: ${{ steps.colors.outputs.inactive_tag }}
+      inactive_pool_id: ${{ steps.colors.outputs.inactive_pool_id }}
+      active_pool_id: ${{ steps.colors.outputs.active_pool_id }}
+      baseline_min: ${{ steps.colors.outputs.baseline_min }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Resolve active / inactive colors
+        id: colors
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          LOADBALANCER_ID: ${{ env.LOADBALANCER_ID }}
+          POOL_TAG: ${{ env.POOL_TAG }}
+          BLUE_TAG: ${{ env.BLUE_TAG }}
+          GREEN_TAG: ${{ env.GREEN_TAG }}
+          AUTOSCALE_POOL_ID_BLUE: ${{ env.AUTOSCALE_POOL_ID_BLUE }}
+          AUTOSCALE_POOL_ID_GREEN: ${{ env.AUTOSCALE_POOL_ID_GREEN }}
+          BASELINE_MIN: ${{ env.BASELINE_MIN }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          for req in LOADBALANCER_ID AUTOSCALE_POOL_ID_BLUE AUTOSCALE_POOL_ID_GREEN; do
+            if [[ -z "${!req}" ]]; then
+              echo "$req must be set (GitHub Actions variable). Apply Terraform blue/green first." >&2
+              exit 1
+            fi
+          done
+          active="$(./deploy/scripts/lb-get-tag.sh)"
+          if [[ -z "$active" ]]; then
+            echo "LB has no droplet_tag; defaulting to blue" >&2
+            active="$BLUE_TAG"
+          fi
+          # During the first blue/green cutover the LB may still use the shared pool tag.
+          if [[ "$active" == "$POOL_TAG" ]]; then
+            echo "LB still on shared pool tag; treating as blue" >&2
+            active="$BLUE_TAG"
+          fi
+          if [[ "$active" == "$BLUE_TAG" ]]; then
+            inactive="$GREEN_TAG"
+            inactive_pool="$AUTOSCALE_POOL_ID_GREEN"
+            active_pool="$AUTOSCALE_POOL_ID_BLUE"
+          elif [[ "$active" == "$GREEN_TAG" ]]; then
+            inactive="$BLUE_TAG"
+            inactive_pool="$AUTOSCALE_POOL_ID_BLUE"
+            active_pool="$AUTOSCALE_POOL_ID_GREEN"
+          else
+            echo "Unexpected LB tag '$active' (expected $BLUE_TAG or $GREEN_TAG)" >&2
+            exit 1
+          fi
+          echo "active_tag=$active" >> "$GITHUB_OUTPUT"
+          echo "inactive_tag=$inactive" >> "$GITHUB_OUTPUT"
+          echo "inactive_pool_id=$inactive_pool" >> "$GITHUB_OUTPUT"
+          echo "active_pool_id=$active_pool" >> "$GITHUB_OUTPUT"
+          echo "baseline_min=$BASELINE_MIN" >> "$GITHUB_OUTPUT"
+          echo "Active=$active Inactive=$inactive"
+
+  scale-inactive:
+    needs: [changes, resolve-colors]
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Scale inactive color to baseline
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          POOL_ID: ${{ needs.resolve-colors.outputs.inactive_pool_id }}
+          MIN: ${{ needs.resolve-colors.outputs.baseline_min }}
+          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" "$MIN"
+          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900
 
   build-api:
     needs: changes
@@ -156,8 +267,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=web-dev
 
   deploy-api:
-    needs: [changes, build-api]
-    if: needs.changes.outputs.api == 'true'
+    needs: [changes, resolve-colors, scale-inactive, build-api]
+    if: |
+      always()
+      && needs.changes.outputs.api == 'true'
+      && needs.build-api.result == 'success'
+      && needs.scale-inactive.result == 'success'
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -173,7 +288,7 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Deploy API to all pool hosts
+      - name: Deploy API to inactive color
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
@@ -181,11 +296,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           API_IMAGE: ${{ needs.build-api.outputs.image }}
-          POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+          POOL_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-
           ./deploy/scripts/ssh-pool.sh -- "$(cat <<EOF
           set -euo pipefail
           cd /opt/sailing-plans
@@ -208,39 +322,13 @@ jobs:
           EOF
           )"
 
-          ./deploy/scripts/ssh-pool.sh --first-only -- "$(cat <<'EOF'
-          set -euo pipefail
-          cd /opt/sailing-plans
-          docker compose exec -T api npx prisma migrate deploy
-          EOF
-          )"
-
-      - name: Verify via load balancer
-        env:
-          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
-          FALLBACK_HOST: ${{ secrets.DROPLET_HOST }}
-        run: |
-          set -euo pipefail
-          host="${LB_HOST:-$FALLBACK_HOST}"
-          if [[ -z "$host" ]]; then
-            echo "Set LOADBALANCER_IP (or DROPLET_HOST) in the development environment" >&2
-            exit 1
-          fi
-          for i in $(seq 1 30); do
-            if curl -fsS "http://${host}/health"; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "LB health check failed for ${host}"
-          exit 1
-
   deploy-web:
-    needs: [changes, build-web, deploy-api]
+    needs: [changes, resolve-colors, scale-inactive, build-web, deploy-api]
     if: |
       always()
       && needs.changes.outputs.web == 'true'
       && needs.build-web.result == 'success'
+      && needs.scale-inactive.result == 'success'
       && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
     runs-on: ubuntu-latest
     environment: development
@@ -257,7 +345,7 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Deploy Web to all pool hosts
+      - name: Deploy Web to inactive color
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
@@ -265,7 +353,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           WEB_IMAGE: ${{ needs.build-web.outputs.image }}
-          POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+          POOL_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
@@ -292,31 +380,12 @@ jobs:
           EOF
           )"
 
-      - name: Verify via load balancer
-        env:
-          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
-          FALLBACK_HOST: ${{ secrets.DROPLET_HOST }}
-        run: |
-          set -euo pipefail
-          host="${LB_HOST:-$FALLBACK_HOST}"
-          if [[ -z "$host" ]]; then
-            echo "Set LOADBALANCER_IP (or DROPLET_HOST) in the development environment" >&2
-            exit 1
-          fi
-          for i in $(seq 1 30); do
-            if curl -fsS -o /dev/null "http://${host}/"; then
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "LB web check failed for ${host}"
-          exit 1
-
   deploy-proxy:
-    needs: [changes, deploy-api, deploy-web]
+    needs: [changes, resolve-colors, scale-inactive, deploy-api, deploy-web]
     if: |
       always()
       && needs.changes.outputs.proxy == 'true'
+      && needs.scale-inactive.result == 'success'
       && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
       && (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped')
     runs-on: ubuntu-latest
@@ -333,12 +402,12 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Sync compose + Caddyfile to all pool hosts
+      - name: Sync compose + Caddyfile to inactive color
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
           DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
-          POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+          POOL_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
@@ -362,7 +431,6 @@ jobs:
           ./deploy/scripts/ssh-pool.sh -- "$(cat <<'EOF'
           set -euo pipefail
           cd /opt/sailing-plans
-          # Force recreate so an updated bind-mounted Caddyfile is loaded (compose up alone won't reload).
           docker compose up -d --no-deps --force-recreate --remove-orphans caddy
           docker compose rm -sf db 2>/dev/null || true
           for i in $(seq 1 30); do
@@ -377,22 +445,105 @@ jobs:
           EOF
           )"
 
-      - name: Verify via load balancer
+  healthcheck-inactive:
+    needs: [resolve-colors, scale-inactive, deploy-api, deploy-web, deploy-proxy]
+    if: |
+      always()
+      && needs.scale-inactive.result == 'success'
+      && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
+      && (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped')
+      && (needs.deploy-proxy.result == 'success' || needs.deploy-proxy.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Confirm inactive fleet healthy
         env:
-          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
-          FALLBACK_HOST: ${{ secrets.DROPLET_HOST }}
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+          MIN: ${{ needs.resolve-colors.outputs.baseline_min }}
         run: |
           set -euo pipefail
-          host="${LB_HOST:-$FALLBACK_HOST}"
-          if [[ -z "$host" ]]; then
-            echo "Set LOADBALANCER_IP (or DROPLET_HOST) in the development environment" >&2
-            exit 1
-          fi
-          for i in $(seq 1 30); do
-            if curl -fsS "http://${host}/health" >/dev/null; then
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 300
+
+  cutover:
+    needs: [resolve-colors, healthcheck-inactive]
+    if: |
+      always()
+      && needs.healthcheck-inactive.result == 'success'
+      && (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_cutover != 'true')
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Flip LB to inactive color
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          LOADBALANCER_ID: ${{ env.LOADBALANCER_ID }}
+          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/lb-set-tag.sh "$INACTIVE_TAG"
+          for i in $(seq 1 36); do
+            if curl -fsS "http://${LB_HOST}/health" >/dev/null; then
+              echo "LB healthy after cutover"
               exit 0
             fi
-            sleep 2
+            sleep 5
           done
-          echo "LB health check failed for ${host}"
+          echo "LB unhealthy after cutover — flip back manually if needed" >&2
           exit 1
+
+      - name: Record active color for migrations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+        run: |
+          gh variable set ACTIVE_COLOR_TAG --env development --body "$INACTIVE_TAG"
+
+  finalize:
+    needs: [resolve-colors, cutover]
+    if: |
+      always()
+      && needs.cutover.result == 'success'
+      && (github.event_name != 'workflow_dispatch' || github.event.inputs.finalize != 'false')
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Scale previous color to standby (min=1)
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          POOL_ID: ${{ needs.resolve-colors.outputs.active_pool_id }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          # DigitalOcean autoscale pools require min_instances >= 1.
+          ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" 1

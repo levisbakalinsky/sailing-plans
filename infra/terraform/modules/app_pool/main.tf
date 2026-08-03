@@ -6,6 +6,7 @@ locals {
       "managed-by:terraform",
       "role:app-host",
       var.pool_tag,
+      var.color_tag,
     ],
     var.tags,
   ))
@@ -59,10 +60,6 @@ locals {
   })
 }
 
-resource "digitalocean_tag" "pool" {
-  name = var.pool_tag
-}
-
 resource "digitalocean_droplet_autoscale" "this" {
   name = var.name
 
@@ -85,10 +82,17 @@ resource "digitalocean_droplet_autoscale" "this" {
     with_droplet_agent = true
   }
 
-  depends_on = [digitalocean_tag.pool]
+  # Deploy workflow scales inactive color up/down around cutover.
+  lifecycle {
+    ignore_changes = [
+      config,
+    ]
+  }
 }
 
 resource "digitalocean_loadbalancer" "this" {
+  count = var.create_loadbalancer ? 1 : 0
+
   name     = "${var.name}-lb"
   region   = var.region
   size     = var.lb_size
@@ -111,14 +115,22 @@ resource "digitalocean_loadbalancer" "this" {
     healthy_threshold        = 2
   }
 
-  droplet_tag = var.pool_tag
+  # Initial attachment; deploy workflow flips this between blue/green color tags.
+  droplet_tag = var.color_tag
+
+  lifecycle {
+    ignore_changes = [droplet_tag]
+  }
 
   depends_on = [digitalocean_droplet_autoscale.this]
 }
 
 resource "digitalocean_firewall" "this" {
+  count = var.create_firewall ? 1 : 0
+
   name = "${var.name}-fw"
-  tags = [digitalocean_tag.pool.name]
+  # Shared pool tag so both colors get the same SSH/HTTP rules.
+  tags = [var.pool_tag]
 
   inbound_rule {
     protocol         = "tcp"

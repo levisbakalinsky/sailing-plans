@@ -1,0 +1,114 @@
+name: Migrate Development
+
+# Run database migrations separately from application deploys.
+# Typical order: Migrate Development → Deploy Development (blue/green).
+on:
+  workflow_dispatch:
+    inputs:
+      api_image:
+        description: "API image to run migrate from (empty = build this commit)"
+        required: false
+        type: string
+        default: ""
+  push:
+    branches: [main]
+    paths:
+      - "apps/api/prisma/migrations/**"
+      - ".github/workflows/migrate-dev.yml"
+
+concurrency:
+  group: migrate-dev
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sailing-plans
+  # Prefer active color tag when set; fall back to shared pool tag.
+  POOL_TAG: ${{ vars.ACTIVE_COLOR_TAG || vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+
+jobs:
+  build-api:
+    if: github.event_name == 'push' || github.event.inputs.api_image == '' || github.event.inputs.api_image == null
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        run: |
+          sha_tag="${GITHUB_SHA::12}"
+          echo "image=${IMAGE_PREFIX}-api:${sha_tag}" >> "$GITHUB_OUTPUT"
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: |
+            ${{ steps.meta.outputs.image }}
+          cache-from: type=gha,scope=api-dev
+          cache-to: type=gha,mode=max,scope=api-dev
+
+  migrate:
+    needs: [build-api]
+    if: always() && (needs.build-api.result == 'success' || needs.build-api.result == 'skipped')
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run prisma migrate deploy on one pool host
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          API_IMAGE: ${{ github.event.inputs.api_image || needs.build-api.outputs.image }}
+          POOL_TAG: ${{ env.POOL_TAG }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${API_IMAGE}" ]]; then
+            echo "API_IMAGE is empty" >&2
+            exit 1
+          fi
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/ssh-pool.sh --first-only -- "$(cat <<EOF
+          set -euo pipefail
+          cd /opt/sailing-plans
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          docker pull "${API_IMAGE}"
+          # Use the host's private DATABASE_URL (VPC) from .env; do not start the app.
+          set -a
+          # shellcheck disable=SC1091
+          source .env
+          set +a
+          if [[ -z "\${DATABASE_URL:-}" ]]; then
+            echo "DATABASE_URL missing on host .env" >&2
+            exit 1
+          fi
+          docker run --rm \
+            -e DATABASE_URL \
+            -e NODE_ENV=production \
+            "${API_IMAGE}" \
+            npx prisma migrate deploy
+          EOF
+          )"

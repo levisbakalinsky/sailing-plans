@@ -3,23 +3,27 @@ output "autoscale_pool_id" {
 }
 
 output "loadbalancer_id" {
-  value = digitalocean_loadbalancer.this.id
+  value = try(digitalocean_loadbalancer.this[0].id, null)
 }
 
 output "loadbalancer_ip" {
-  value = digitalocean_loadbalancer.this.ip
+  value = try(digitalocean_loadbalancer.this[0].ip, null)
 }
 
 output "pool_tag" {
   value = var.pool_tag
 }
 
+output "color_tag" {
+  value = var.color_tag
+}
+
 output "app_url" {
-  value = "http://${digitalocean_loadbalancer.this.ip}/"
+  value = try("http://${digitalocean_loadbalancer.this[0].ip}/", null)
 }
 
 output "health_url" {
-  value = "http://${digitalocean_loadbalancer.this.ip}/health"
+  value = try("http://${digitalocean_loadbalancer.this[0].ip}/health", null)
 }
 
 output "min_instances" {

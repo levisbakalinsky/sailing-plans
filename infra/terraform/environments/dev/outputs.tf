@@ -1,38 +1,50 @@
-output "autoscale_pool_id" {
-  value = module.app_pool.autoscale_pool_id
+output "autoscale_pool_id_blue" {
+  value = module.app_pool_blue.autoscale_pool_id
+}
+
+output "autoscale_pool_id_green" {
+  value = module.app_pool_green.autoscale_pool_id
 }
 
 output "loadbalancer_id" {
-  value = module.app_pool.loadbalancer_id
+  value = module.app_pool_blue.loadbalancer_id
 }
 
 output "loadbalancer_ip" {
-  value = module.app_pool.loadbalancer_ip
+  value = module.app_pool_blue.loadbalancer_ip
 }
 
 output "pool_tag" {
-  value = module.app_pool.pool_tag
+  value = module.app_pool_blue.pool_tag
+}
+
+output "blue_tag" {
+  value = module.app_pool_blue.color_tag
+}
+
+output "green_tag" {
+  value = module.app_pool_green.color_tag
 }
 
 output "deploy_hosts_tag" {
-  description = "Tag used by Deploy Development to find SSH targets."
-  value       = module.app_pool.pool_tag
+  description = "Shared tag for finding either color (DB firewall / ops)."
+  value       = module.app_pool_blue.pool_tag
 }
 
 output "app_url" {
-  value = module.app_pool.app_url
+  value = module.app_pool_blue.app_url
 }
 
 output "health_url" {
-  value = module.app_pool.health_url
+  value = module.app_pool_blue.health_url
 }
 
 output "pool_min_instances" {
-  value = module.app_pool.min_instances
+  value = module.app_pool_blue.min_instances
 }
 
 output "pool_max_instances" {
-  value = module.app_pool.max_instances
+  value = module.app_pool_blue.max_instances
 }
 
 output "db_cluster_id" {

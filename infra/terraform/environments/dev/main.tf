@@ -3,7 +3,21 @@ data "digitalocean_ssh_key" "deploy" {
 }
 
 locals {
-  pool_tag = "${var.project}-app-${var.environment}-pool"
+  pool_tag  = "${var.project}-app-${var.environment}-pool"
+  blue_tag  = "${local.pool_tag}-blue"
+  green_tag = "${local.pool_tag}-green"
+}
+
+resource "digitalocean_tag" "pool" {
+  name = local.pool_tag
+}
+
+resource "digitalocean_tag" "blue" {
+  name = local.blue_tag
+}
+
+resource "digitalocean_tag" "green" {
+  name = local.green_tag
 }
 
 module "postgres" {
@@ -50,7 +64,8 @@ module "valkey" {
   ]
 }
 
-module "app_pool" {
+# Active baseline color (starts as blue). Deploy workflow scales green up for cutover.
+module "app_pool_blue" {
   source = "../../modules/app_pool"
 
   name                   = var.droplet_name
@@ -65,7 +80,10 @@ module "app_pool" {
   max_instances          = var.pool_max_instances
   target_cpu_utilization = var.pool_target_cpu_utilization
   cooldown_minutes       = var.pool_cooldown_minutes
-  pool_tag               = local.pool_tag
+  pool_tag               = digitalocean_tag.pool.name
+  color_tag              = digitalocean_tag.blue.name
+  create_loadbalancer    = true
+  create_firewall        = true
   allowed_ssh_cidrs      = var.allowed_ssh_cidrs
   database_url           = module.postgres.private_database_url
   redis_url              = module.valkey.private_redis_url
@@ -85,11 +103,51 @@ module "app_pool" {
   depends_on = [module.postgres, module.valkey]
 }
 
+# Standby color. DO requires min_instances >= 1; CI scales to baseline for cutover,
+# then scales the previous color back to 1 after flip.
+module "app_pool_green" {
+  source = "../../modules/app_pool"
+
+  name                   = "${var.droplet_name}-green"
+  environment            = var.environment
+  project                = var.project
+  region                 = var.region
+  size                   = var.droplet_size
+  image                  = var.droplet_image
+  vpc_uuid               = var.vpc_uuid
+  ssh_key_fingerprints   = [data.digitalocean_ssh_key.deploy.fingerprint]
+  min_instances          = 1
+  max_instances          = var.pool_max_instances
+  target_cpu_utilization = var.pool_target_cpu_utilization
+  cooldown_minutes       = var.pool_cooldown_minutes
+  pool_tag               = digitalocean_tag.pool.name
+  color_tag              = digitalocean_tag.green.name
+  create_loadbalancer    = false
+  create_firewall        = false
+  allowed_ssh_cidrs      = var.allowed_ssh_cidrs
+  database_url           = module.postgres.private_database_url
+  redis_url              = module.valkey.private_redis_url
+  ghcr_username          = var.ghcr_username
+  ghcr_pull_token        = var.ghcr_pull_token
+  api_image              = var.api_image
+  web_image              = var.web_image
+  compose_yaml           = file("${path.module}/../../../../deploy/docker-compose.yml")
+  caddyfile              = file("${path.module}/../../../../deploy/Caddyfile")
+  lb_size                = var.lb_size
+
+  tags = [
+    "owner:${var.owner}",
+    "cost-center:${var.cost_center}",
+  ]
+
+  depends_on = [module.postgres, module.valkey, module.app_pool_blue]
+}
+
 module "cloudflare_dns" {
   source = "../../modules/cloudflare_dns"
 
   domains          = var.cloudflare_domains
-  origin_ipv4      = module.app_pool.loadbalancer_ip
+  origin_ipv4      = module.app_pool_blue.loadbalancer_ip
   proxied          = true
   ssl_mode         = "flexible"
   always_use_https = "on"

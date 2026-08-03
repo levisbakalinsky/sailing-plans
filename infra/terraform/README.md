@@ -21,10 +21,11 @@ infra/terraform/
 
 | Concern | Tool |
 | --- | --- |
-| Autoscale pool, LB, managed Postgres + Valkey, firewalls, VPC, tags | Terraform |
+| Blue/green autoscale pools, LB, Postgres, Valkey, firewalls, tags | Terraform |
 | Cloudflare DNS (apex/www → LB) + SSL mode | Terraform (`cloudflare_dns`) |
 | `.net`/`.org` → `.com` 301 redirects | Cloudflare Single Redirects (dashboard) + Caddyfile backup |
-| Container image build + rolling `docker compose` deploy | GitHub Actions (`Deploy Development`) |
+| DB migrations (`prisma migrate deploy`) | GitHub Actions (`Migrate Development`) — run **before** deploy |
+| Blue/green app deploy + LB tag cutover | GitHub Actions (`Deploy Development`) |
 | New pool member bootstrap | cloud-init (`app_pool` user-data) |
 
 ## Prerequisites
@@ -83,16 +84,21 @@ Terraform manages:
 
 Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (API tokens on this account cannot manage the dynamic-redirect ruleset). The deploy `Caddyfile` also redirects alternate TLDs as defense in depth.
 
-## Autoscale pool (dev)
+## Blue/green autoscale (dev)
 
 | Setting | Default |
 | --- | --- |
-| Min / max | 2 / 4 |
+| Active color min / max | 2 / 4 |
+| Standby color min / max | 1 / 4 (DO requires min ≥ 1) |
 | Size | `s-2vcpu-4gb` |
 | CPU target | 0.7 |
 | Cooldown | 10 minutes |
-| LB | `lb-small`, HTTP `:80` → `:80`, health `/health` |
-| Pool tag | `sailing-plans-app-dev-pool` |
+| LB | `lb-small`, HTTP `:80` → `:80`, health `/health`; `droplet_tag` flipped by CI |
+| Shared tag | `sailing-plans-app-dev-pool` (DB/Valkey/firewall) |
+| Color tags | `…-pool-blue`, `…-pool-green` |
+
+Deploy flow: scale inactive → deploy → health → flip LB tag → scale previous color to standby (1).  
+Migrations are a separate workflow (`Migrate Development`).
 
 ## Managed Postgres (dev)
 
