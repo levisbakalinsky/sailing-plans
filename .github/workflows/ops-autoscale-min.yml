@@ -60,9 +60,18 @@ jobs:
           if [[ "$POOL" == "blue" ]]; then
             POOL_ID="$AUTOSCALE_POOL_ID_BLUE"
             TAG="$BLUE_TAG"
+            POOL_NAME="sailing-plans-app-dev"
           else
             POOL_ID="$AUTOSCALE_POOL_ID_GREEN"
             TAG="$GREEN_TAG"
+            POOL_NAME="sailing-plans-app-dev-green"
+          fi
+          # Prefer live lookup by name — IDs go stale after delete/recreate.
+          found="$(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
+            "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
+            | jq -r --arg n "$POOL_NAME" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
+          if [[ -n "$found" ]]; then
+            POOL_ID="$found"
           fi
           if [[ "$ACTION" == "delete" ]]; then
             keep="$ACTIVE_COLOR_TAG"
@@ -74,6 +83,21 @@ jobs:
             if [[ "$keep" == "$TAG" ]]; then
               echo "Refusing to delete the active color ($TAG)" >&2
               exit 1
+            fi
+            if [[ -z "$POOL_ID" ]]; then
+              echo "No pool named $POOL_NAME found; scrubbing leftovers only"
+              ./deploy/scripts/autoscale-delete.sh "00000000-0000-0000-0000-000000000000" "$TAG" "$keep" || true
+              # Direct leftover scrub when pool id unknown
+              mapfile -t ROWS < <(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
+                "https://api.digitalocean.com/v2/droplets?tag_name=${TAG}&per_page=200" \
+                | jq -r --arg keep "$keep" '.droplets[]? | select(((.tags//[])|index($keep)|not)) | .id')
+              for id in "${ROWS[@]:-}"; do
+                [[ -n "$id" ]] || continue
+                curl -fsS -X DELETE -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
+                  "https://api.digitalocean.com/v2/droplets/${id}" >/dev/null || true
+                echo "destroyed $id"
+              done
+              exit 0
             fi
             ./deploy/scripts/autoscale-delete.sh "$POOL_ID" "$TAG" "$keep"
           else
