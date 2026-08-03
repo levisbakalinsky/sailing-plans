@@ -1,0 +1,50 @@
+name: GHCR Visibility
+
+on:
+  workflow_dispatch:
+    inputs:
+      visibility:
+        description: Package visibility
+        type: choice
+        default: public
+        options:
+          - public
+          - private
+
+jobs:
+  set-visibility:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Set container package visibility
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VISIBILITY: ${{ inputs.visibility }}
+        run: |
+          set -euo pipefail
+          owner="${GITHUB_REPOSITORY_OWNER}"
+          for pkg in sailing-plans-api sailing-plans-web; do
+            echo "Setting ${owner}/${pkg} → ${VISIBILITY}"
+            # User-owned packages
+            code=$(curl -sS -o /tmp/out.json -w "%{http_code}" -X PUT \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" \
+              "https://api.github.com/user/packages/container/${pkg}/visibility" \
+              -d "{\"visibility\":\"${VISIBILITY}\"}" || true)
+            echo "user route HTTP ${code}: $(cat /tmp/out.json)"
+            if [[ "$code" != "204" && "$code" != "200" ]]; then
+              code=$(curl -sS -o /tmp/out.json -w "%{http_code}" -X PUT \
+                -H "Authorization: Bearer ${GH_TOKEN}" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "https://api.github.com/orgs/${owner}/packages/container/${pkg}/visibility" \
+                -d "{\"visibility\":\"${VISIBILITY}\"}" || true)
+              echo "org route HTTP ${code}: $(cat /tmp/out.json)"
+            fi
+            if [[ "$code" != "204" && "$code" != "200" ]]; then
+              echo "Failed to set visibility for ${pkg}" >&2
+              exit 1
+            fi
+          done

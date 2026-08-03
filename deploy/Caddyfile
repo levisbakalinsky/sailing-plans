@@ -1,4 +1,10 @@
-:80 {
+# Alternate TLDs → canonical (defense in depth; Cloudflare Page Rules also redirect).
+sailingplans.net, www.sailingplans.net, sailingplans.org, www.sailingplans.org {
+	redir https://sailingplans.com{uri} permanent
+}
+
+# Public site + LB health checks (Host may be IP or sailingplans.com).
+sailingplans.com, www.sailingplans.com, :80 {
 	encode gzip
 
 	handle /api/* {

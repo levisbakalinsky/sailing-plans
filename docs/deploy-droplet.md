@@ -34,7 +34,7 @@ Environment: **`development`**.
 | `DROPLET_SSH_KEY` | Private key matching Terraform `ssh_key_name` |
 | `LOADBALANCER_IP` | LB public IP (`terraform output -raw loadbalancer_ip`) |
 | `DROPLET_HOST` | Optional fallback if `LOADBALANCER_IP` unset |
-| `GHCR_PULL_TOKEN` | PAT/`read:packages` token for Droplet boot pulls (`TF_VAR_ghcr_pull_token`) |
+| `GHCR_PULL_TOKEN` | Optional PAT/`read:packages` for Droplet boot pulls (`TF_VAR_ghcr_pull_token`). Prefer public GHCR packages via **GHCR Visibility** workflow. |
 | `POOL_TAG` (optional variable) | Defaults to `sailing-plans-app-dev-pool` |
 
 Images: `ghcr.io/<owner>/sailing-plans-api:dev` and `-web:dev` (plus sha tags).

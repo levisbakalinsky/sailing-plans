@@ -27,3 +27,15 @@ resource "cloudflare_record" "www" {
   ttl     = 1
   comment = "managed-by:terraform sailing-plans"
 }
+
+resource "cloudflare_zone_settings_override" "this" {
+  for_each = data.cloudflare_zone.this
+
+  zone_id = each.value.id
+
+  settings {
+    ssl              = var.ssl_mode
+    always_use_https = var.always_use_https
+    min_tls_version  = "1.2"
+  }
+}
