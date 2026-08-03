@@ -362,7 +362,8 @@ jobs:
           ./deploy/scripts/ssh-pool.sh -- "$(cat <<'EOF'
           set -euo pipefail
           cd /opt/sailing-plans
-          docker compose up -d --no-deps --remove-orphans caddy
+          # Force recreate so an updated bind-mounted Caddyfile is loaded (compose up alone won't reload).
+          docker compose up -d --no-deps --force-recreate --remove-orphans caddy
           docker compose rm -sf db 2>/dev/null || true
           for i in $(seq 1 30); do
             if curl -fsS http://127.0.0.1/health >/dev/null; then
