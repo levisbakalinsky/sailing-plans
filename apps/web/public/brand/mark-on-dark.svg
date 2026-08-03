@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-hidden="true">
+  <!-- Transparent-background mark for use on dark UI -->
+  <path
+    d="M6 40h52"
+    stroke="#71e5f2"
+    stroke-opacity="0.28"
+    stroke-width="1.75"
+    stroke-linecap="round"
+  />
+  <path
+    d="M8 48c10-18 24-28 40-28"
+    stroke="#71e5f2"
+    stroke-width="3"
+    stroke-linecap="round"
+  />
+  <circle cx="48" cy="20" r="5" fill="#71e5f2"/>
+</svg>
