@@ -8,6 +8,7 @@ Corporate-style Infrastructure-as-Code for Sailing Plans on DigitalOcean.
 infra/terraform/
   modules/
     app_pool/          # Droplet Autoscale Pool + Load Balancer + firewall
+    cloudflare_dns/    # Apex + www A records → Load Balancer (proxied)
     app_host/          # Legacy single Droplet (staging scaffold only)
     postgres/          # Managed Postgres + DB firewall
   environments/
@@ -21,6 +22,7 @@ infra/terraform/
 | Concern | Tool |
 | --- | --- |
 | Autoscale pool, LB, managed Postgres, firewalls, VPC, tags | Terraform |
+| Cloudflare DNS (apex/www → LB) | Terraform (`cloudflare_dns`) |
 | Container image build + rolling `docker compose` deploy | GitHub Actions (`Deploy Development`) |
 | New pool member bootstrap | cloud-init (`app_pool` user-data) |
 
@@ -30,6 +32,7 @@ infra/terraform/
 - `DIGITALOCEAN_TOKEN` in the environment (1Password / CI secret)
 - Existing DO SSH key named `sailing-plans-do-deploy` (or override `ssh_key_name`)
 - Optional: `TF_VAR_ghcr_pull_token` so new Droplets can pull private GHCR images on boot
+- `CLOUDFLARE_API_TOKEN` with Zone DNS Edit on the sailingplans zones
 
 ## Dev workflow
 
@@ -89,7 +92,19 @@ Required GitHub Environment **`development`** secrets:
 | `DROPLET_USER` / `DROPLET_SSH_KEY` | SSH to pool members |
 | `LOADBALANCER_IP` | Public health checks after deploy |
 | `GHCR_PULL_TOKEN` | Injected as `TF_VAR_ghcr_pull_token` for user-data pulls |
+| `CLOUDFLARE_API_TOKEN` | DNS management for sailingplans.* zones |
 | `SPACES_ACCESS_KEY_ID` / `SPACES_SECRET_ACCESS_KEY` | Spaces remote state |
+
+## Cloudflare (dev)
+
+Public hostnames (proxied / orange-cloud) point at the DO Load Balancer:
+
+- https://sailingplans.com / https://www.sailingplans.com
+- https://sailingplans.net / https://www.sailingplans.net
+- https://sailingplans.org / https://www.sailingplans.org
+- https://sailingplans.us / https://www.sailingplans.us (zone added; needs active NS delegation)
+
+SSL mode is **Flexible** (Cloudflare HTTPS → origin HTTP on LB `:80`) with **Always Use HTTPS** on. Upgrade to Full (Strict) later with a Cloudflare Origin CA cert on Caddy.
 
 ### SSH lockdown
 

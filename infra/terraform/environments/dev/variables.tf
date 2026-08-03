@@ -133,3 +133,14 @@ variable "web_image" {
   type    = string
   default = "ghcr.io/levisbakalinsky/sailing-plans-web:dev"
 }
+
+variable "cloudflare_domains" {
+  description = "Cloudflare zones whose apex + www point at the Load Balancer."
+  type        = list(string)
+  default = [
+    "sailingplans.com",
+    "sailingplans.net",
+    "sailingplans.org",
+    "sailingplans.us",
+  ]
+}

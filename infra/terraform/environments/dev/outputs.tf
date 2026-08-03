@@ -70,3 +70,13 @@ output "database_url_public" {
   value       = module.postgres.public_database_url
   sensitive   = true
 }
+
+output "cloudflare_zone_ids" {
+  value = module.cloudflare_dns.zone_ids
+}
+
+output "public_urls" {
+  value = [
+    for d in var.cloudflare_domains : "https://${d}/"
+  ]
+}

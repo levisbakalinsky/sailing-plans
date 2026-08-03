@@ -32,3 +32,10 @@ pool_cooldown_minutes       = 10
 lb_size                     = "lb-small"
 # Set in CI / shell: export TF_VAR_ghcr_pull_token=...
 # ghcr_pull_token = ""
+
+cloudflare_domains = [
+  "sailingplans.com",
+  "sailingplans.net",
+  "sailingplans.org",
+  "sailingplans.us",
+]

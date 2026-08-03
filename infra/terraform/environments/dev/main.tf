@@ -62,3 +62,13 @@ module "app_pool" {
 
   depends_on = [module.postgres]
 }
+
+module "cloudflare_dns" {
+  source = "../../modules/cloudflare_dns"
+
+  domains          = var.cloudflare_domains
+  origin_ipv4      = module.app_pool.loadbalancer_ip
+  proxied          = true
+  ssl_mode         = "flexible"
+  always_use_https = "on"
+}

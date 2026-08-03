@@ -41,9 +41,18 @@ Images: `ghcr.io/<owner>/sailing-plans-api:dev` and `-web:dev` (plus sha tags).
 
 ## URLs
 
+Public (Cloudflare → LB):
+
+- https://sailingplans.com/
+- https://sailingplans.com/health
+- https://sailingplans.com/api/health
+
+Also live: `.net` / `.org` (same stack). `.us` zone exists but needs nameserver activation.
+
+Direct LB (ops):
+
 - Web: `http://<loadbalancer-ip>/`
 - API health: `http://<loadbalancer-ip>/health`
-- API prefix: `http://<loadbalancer-ip>/api/health`
 
 ## Local helpers
 
