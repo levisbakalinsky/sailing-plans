@@ -26,10 +26,10 @@ infra/terraform/
 | Cloudflare DNS (apex/www → LB) + SSL mode | Terraform (`cloudflare_dns`) |
 | `.net`/`.org` → `.com` 301 redirects | Cloudflare Single Redirects (dashboard) + Caddyfile backup |
 | DB migrations | `Migrate DB (Development)` (before ship when schema changes) |
-| App ship + release history | `Ship (Development)` / `Release history (Development)` |
+| App ship + release history | `Ship (Development)` / `Ops` → releases |
 | New pool member bootstrap | cloud-init (`app_pool` user-data) |
 
-Green pool: apply does **not** recreate a missing green pool unless it is live, already present, or `ensure_green_pool=true`. Ship creates the idle color when shipping.
+Green pool: apply manages it only if it is live or already present. Ship creates the idle color when shipping.
 
 Developers: [`docs/shipping.md`](../../docs/shipping.md). Ops detail: [`docs/deploy-ops.md`](../../docs/deploy-ops.md).
 
@@ -102,9 +102,7 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 | Shared tag | `sailing-plans-app-dev-pool` (DB/Valkey/firewall) |
 | Color tags | `…-pool-blue`, `…-pool-green` |
 
-**Ownership split:** Terraform defines blue (+ optional green) + LB. Ship creates/deletes the idle color around cutovers. Apply does not recreate a missing green pool unless it is live, already present, or `ensure_green_pool=true`.
-
-Do **not** use Terraform’s optional `bootstrap_lb_blue` after green (or any non-blue color) is live.
+**Ownership split:** Terraform defines blue (+ optional green) + LB. Ship creates/deletes the idle color around cutovers. Apply does not recreate a missing green pool unless it is live or already present.
 
 ## Managed Postgres (dev)
 

@@ -1,15 +1,9 @@
 name: Migrate DB (Development)
 
-# Applies Prisma migrations. Runs before Ship when schema changes.
-# Developers: docs/shipping.md — leave api_image empty unless you know you need it.
+# Applies Prisma migrations. Auto on migration paths; Ship waits / is re-triggered after.
+# See docs/shipping.md
 on:
   workflow_dispatch:
-    inputs:
-      api_image:
-        description: "Leave empty (builds this commit). ⚠ Advanced: pin a specific API image"
-        required: false
-        type: string
-        default: ""
   push:
     branches: [main]
     paths:
@@ -17,7 +11,6 @@ on:
       - ".github/workflows/migrate-dev.yml"
 
 concurrency:
-  # Serialize with ship/ops so migrate always wins the DB before cutover.
   group: deploy-dev-pool
   cancel-in-progress: false
 
@@ -27,7 +20,6 @@ env:
 
 jobs:
   build-api:
-    if: github.event_name == 'push' || github.event.inputs.api_image == '' || github.event.inputs.api_image == null
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -58,7 +50,6 @@ jobs:
 
   migrate:
     needs: [build-api]
-    if: always() && (needs.build-api.result == 'success' || needs.build-api.result == 'skipped')
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -74,24 +65,20 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Run prisma migrate deploy on one pool host
+      - name: Run prisma migrate deploy
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
           DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
-          API_IMAGE: ${{ github.event.inputs.api_image || needs.build-api.outputs.image }}
+          API_IMAGE: ${{ needs.build-api.outputs.image }}
           LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
           BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
           GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
           POOL_TAG_FALLBACK: ${{ vars.ACTIVE_COLOR_TAG || vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
         run: |
           set -euo pipefail
-          if [[ -z "${API_IMAGE}" ]]; then
-            echo "API_IMAGE is empty" >&2
-            exit 1
-          fi
           chmod +x deploy/scripts/*.sh
           if [[ -n "${LOADBALANCER_ID}" ]]; then
             active="$(./deploy/scripts/lb-get-tag.sh || true)"
@@ -162,6 +149,4 @@ jobs:
             exit 0
           fi
           echo "App changes present — triggering Ship (Development)"
-          gh workflow run "Ship (Development)" --ref "$GITHUB_REF_NAME" \
-            -f component=all \
-            -f release_message="auto after migrate ${GITHUB_SHA::12}"
+          gh workflow run "Ship (Development)" --ref "$GITHUB_REF_NAME"

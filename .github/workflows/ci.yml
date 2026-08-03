@@ -1,7 +1,6 @@
 name: CI
 
-# Developer checks — typecheck, test, build. This is what PRs should wait on.
-# Deploy / migrate / release / ops are separate (see docs/shipping.md).
+# PR / main checks. See docs/shipping.md
 on:
   pull_request:
   push:

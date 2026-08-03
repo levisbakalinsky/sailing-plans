@@ -1,41 +1,25 @@
 name: Terraform (Development)
 
-# Platform / infra only — not day-to-day feature work. See docs/deploy-ops.md
+# Platform only. Change infra → plan on PR/push. Apply when you mean it.
+# See docs/deploy-ops.md
 on:
   push:
     branches: [main]
     paths:
       - "infra/terraform/**"
-      - "deploy/docker-compose.yml"
-      - "deploy/Caddyfile"
       - ".github/workflows/terraform-dev.yml"
   pull_request:
     paths:
       - "infra/terraform/**"
-      - "deploy/docker-compose.yml"
-      - "deploy/Caddyfile"
       - ".github/workflows/terraform-dev.yml"
   workflow_dispatch:
     inputs:
       apply:
-        description: "Apply the plan (creates/updates DO resources). Leave false to plan only."
-        type: boolean
-        default: false
-      ensure_green_pool:
-        description: "Recreate green pool if missing (leave false; Ship creates idle color when needed)"
-        type: boolean
-        default: false
-      bootstrap_lb_blue:
-        description: "⚠ First-time setup only — force LB tag to blue (never after another color is live)"
-        type: boolean
-        default: false
-      wire_pool_database_url:
-        description: "⚠ After apply, write DATABASE_URL + REDIS_URL into every pool Droplet .env and restart api"
+        description: "Apply this plan to DigitalOcean / Cloudflare"
         type: boolean
         default: false
 
 concurrency:
-  # Plan can run on its own; apply joins the deploy family so it cannot race Ship.
   group: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'deploy-dev-pool' || 'terraform-dev' }}
   cancel-in-progress: false
 
@@ -48,26 +32,7 @@ env:
   TF_INPUT: "false"
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.15.8
-
-      - name: terraform fmt
-        run: terraform fmt -check -recursive ../..
-
-      - name: terraform init (no backend)
-        run: terraform init -backend=false
-
-      - name: terraform validate
-        run: terraform validate
-
   plan:
-    needs: validate
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -79,6 +44,12 @@ jobs:
         with:
           terraform_version: 1.15.8
 
+      - name: Format + validate
+        run: |
+          terraform fmt -check -recursive ../..
+          terraform init -backend=false
+          terraform validate
+
       - name: terraform init
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -86,44 +57,34 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         run: terraform init -backend-config=backend.hcl -input=false
 
-      - name: Resolve manage_green_pool + state address
+      - name: Resolve manage_green_pool
         id: green
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
           GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
-          ENSURE_GREEN: ${{ github.event_name == 'workflow_dispatch' && inputs.ensure_green_pool || false }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
           sudo apt-get update && sudo apt-get install -y jq
           chmod +x deploy/scripts/*.sh
-          # Introduce count index once (module.app_pool_green → module.app_pool_green[0]).
           (
             cd infra/terraform/environments/dev
             if terraform state list 2>/dev/null | grep -qx 'module.app_pool_green'; then
               terraform state mv 'module.app_pool_green' 'module.app_pool_green[0]'
             fi
           )
-          # Only manage green when it exists, is live, or explicitly requested.
-          # Avoids recreate-after-teardown; Ship creates the idle color when needed.
+          # Manage green only when it already exists or is live. Ship creates idle color.
           manage=false
-          if [[ "${ENSURE_GREEN}" == "true" ]]; then
-            manage=true
-          fi
           green_id="$(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
             "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
             | jq -r '.autoscale_pools[]? | select(.name=="sailing-plans-app-dev-green") | .id' | head -n1 || true)"
-          if [[ -n "$green_id" ]]; then
-            manage=true
-          fi
+          [[ -n "$green_id" ]] && manage=true
           if [[ -n "${LOADBALANCER_ID:-}" ]]; then
             active="$(./deploy/scripts/lb-get-tag.sh || true)"
-            if [[ "$active" == "$GREEN_TAG" ]]; then
-              manage=true
-            fi
+            [[ "$active" == "$GREEN_TAG" ]] && manage=true
           fi
-          echo "manage_green_pool=$manage (ensure=$ENSURE_GREEN exists=${green_id:-none})"
+          echo "manage_green_pool=$manage (exists=${green_id:-none})"
           echo "manage=$manage" >> "$GITHUB_OUTPUT"
 
       - name: terraform plan
@@ -153,7 +114,6 @@ jobs:
     environment: development
     permissions:
       contents: read
-    # Belt-and-suspenders with workflow concurrency when apply=true.
     concurrency:
       group: deploy-dev-pool
       cancel-in-progress: false
@@ -177,7 +137,7 @@ jobs:
           name: tfplan-dev
           path: ${{ github.workspace }}
 
-      - name: terraform apply (from plan)
+      - name: terraform apply
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -186,7 +146,7 @@ jobs:
           TF_VAR_ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
         run: terraform apply -input=false "${GITHUB_WORKSPACE}/infra/terraform/environments/dev/tfplan"
 
-      - name: Print pool endpoints
+      - name: Outputs
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
@@ -195,92 +155,6 @@ jobs:
           set -euo pipefail
           echo "loadbalancer_ip=$(terraform output -raw loadbalancer_ip)"
           echo "loadbalancer_id=$(terraform output -raw loadbalancer_id)"
-          echo "pool_tag=$(terraform output -raw pool_tag)"
-          echo "blue_tag=$(terraform output -raw blue_tag)"
-          echo "green_tag=$(terraform output -raw green_tag)"
+          echo "health_url=$(terraform output -raw health_url)"
           echo "autoscale_pool_id_blue=$(terraform output -raw autoscale_pool_id_blue)"
           echo "autoscale_pool_id_green=$(terraform output -raw autoscale_pool_id_green || echo null)"
-          echo "health_url=$(terraform output -raw health_url)"
-          echo "NOTE: Missing green pool is left missing unless ensure_green_pool=true or green is live. Ship creates idle color."
-
-      - name: Bootstrap LB → blue (opt-in only)
-        if: inputs.bootstrap_lb_blue
-        env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update && sudo apt-get install -y jq
-          chmod +x deploy/scripts/*.sh
-          export LOADBALANCER_ID="$(cd infra/terraform/environments/dev && terraform output -raw loadbalancer_id)"
-          export BLUE_TAG="$(cd infra/terraform/environments/dev && terraform output -raw blue_tag)"
-          current="$(./deploy/scripts/lb-get-tag.sh || true)"
-          echo "Current LB tag: ${current:-empty}"
-          if [[ -n "$current" && "$current" != "$(cd infra/terraform/environments/dev && terraform output -raw pool_tag)" && "$current" != "$BLUE_TAG" ]]; then
-            echo "Refusing bootstrap_lb_blue: LB already on $current (would disrupt live color)" >&2
-            exit 1
-          fi
-          ./deploy/scripts/lb-set-tag.sh "$BLUE_TAG"
-
-      - name: Export private DATABASE_URL + REDIS_URL
-        if: inputs.wire_pool_database_url
-        id: dburl
-        env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: |
-          url="$(terraform output -raw database_url_private)"
-          redis="$(terraform output -raw redis_url_private)"
-          echo "::add-mask::$url"
-          echo "::add-mask::$redis"
-          echo "url=$url" >> "$GITHUB_OUTPUT"
-          echo "redis=$redis" >> "$GITHUB_OUTPUT"
-          echo "pool_tag=$(terraform output -raw pool_tag)" >> "$GITHUB_OUTPUT"
-
-      - name: Wire DATABASE_URL + REDIS_URL on all pool hosts
-        if: inputs.wire_pool_database_url
-        env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-          DROPLET_USER: ${{ secrets.DROPLET_USER }}
-          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
-          DATABASE_URL: ${{ steps.dburl.outputs.url }}
-          REDIS_URL: ${{ steps.dburl.outputs.redis }}
-          POOL_TAG: ${{ steps.dburl.outputs.pool_tag }}
-        working-directory: ${{ github.workspace }}
-        run: |
-          set -euo pipefail
-          sudo apt-get update && sudo apt-get install -y jq
-          chmod +x deploy/scripts/*.sh
-          # Base64 avoids shell metacharacters in DB passwords when building the remote script.
-          DB_B64="$(printf '%s' "$DATABASE_URL" | base64 -w0)"
-          REDIS_B64="$(printf '%s' "$REDIS_URL" | base64 -w0)"
-          ./deploy/scripts/ssh-pool.sh -- "$(cat <<EOF
-          set -euo pipefail
-          cd /opt/sailing-plans
-          touch .env
-          db="\$(printf '%s' '${DB_B64}' | base64 -d)"
-          redis="\$(printf '%s' '${REDIS_B64}' | base64 -d)"
-          awk -v url="\$db" -v redis="\$redis" '
-            BEGIN { db=0; rd=0 }
-            /^DATABASE_URL=/ { print "DATABASE_URL=" url; db=1; next }
-            /^REDIS_URL=/ { print "REDIS_URL=" redis; rd=1; next }
-            { print }
-            END {
-              if (!db) print "DATABASE_URL=" url
-              if (!rd) print "REDIS_URL=" redis
-            }
-          ' .env > .env.tmp && mv .env.tmp .env
-          chmod 600 .env
-          docker compose rm -sf db 2>/dev/null || true
-          docker compose up -d --no-deps --force-recreate --remove-orphans api
-          for i in \$(seq 1 30); do
-            if curl -fsS http://127.0.0.1/health >/dev/null; then
-              exit 0
-            fi
-            sleep 2
-          done
-          docker compose logs --tail=80 api
-          exit 1
-          EOF
-          )"

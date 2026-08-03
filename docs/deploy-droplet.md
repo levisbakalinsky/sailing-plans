@@ -1,4 +1,4 @@
-# Deploy docs (moved)
+# Deploy docs
 
 - **Developers:** [shipping.md](./shipping.md)
-- **Platform / on-call:** [deploy-ops.md](./deploy-ops.md)
+- **Platform:** [deploy-ops.md](./deploy-ops.md)

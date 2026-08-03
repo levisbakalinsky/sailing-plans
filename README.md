@@ -62,12 +62,11 @@ pnpm dev
 
 ## CI & shipping
 
-| What | Where | Docs |
+| What | Actions workflow | Docs |
 | --- | --- | --- |
-| PR checks (typecheck / test / build) | GitHub Actions → **CI** | automatic on PRs |
-| How to ship (fix-forward; no rollback) | GitHub Actions | [docs/shipping.md](docs/shipping.md) |
-| Platform deploy ops (blue/green, pools) | GitHub Actions | [docs/deploy-ops.md](docs/deploy-ops.md) |
-| Infra (LB, Postgres, Valkey, DNS) | Terraform | [infra/terraform/README.md](infra/terraform/README.md) |
+| PR checks | **CI** | — |
+| Ship / migrate | **Ship**, **Migrate DB** | [docs/shipping.md](docs/shipping.md) |
+| Infra / ops | **Terraform**, **Ops** | [docs/deploy-ops.md](docs/deploy-ops.md), [infra/terraform/README.md](infra/terraform/README.md) |
 
 ## Linear
 

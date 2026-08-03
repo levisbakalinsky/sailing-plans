@@ -15,22 +15,6 @@ on:
       - "pnpm-lock.yaml"
       - ".github/workflows/deploy-dev.yml"
   workflow_dispatch:
-    inputs:
-      component:
-        description: "What to ship (usually leave as all)"
-        required: true
-        type: choice
-        default: all
-        options:
-          - all
-          - api
-          - web
-          - proxy
-      release_message:
-        description: "Optional note in release history"
-        required: false
-        type: string
-        default: ""
 
 concurrency:
   group: deploy-dev-pool
@@ -89,14 +73,8 @@ jobs:
         run: |
           defer=false
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            component="${{ github.event.inputs.component }}"
-            api=false; web=false; proxy=false
-            case "$component" in
-              all) api=true; web=true; proxy=true ;;
-              api) api=true ;;
-              web) web=true ;;
-              proxy) proxy=true ;;
-            esac
+            # Manual run always ships everything.
+            api=true; web=true; proxy=true
           else
             api=${{ steps.filter.outputs.api || 'false' }}
             web=${{ steps.filter.outputs.web || 'false' }}
@@ -618,7 +596,7 @@ jobs:
           API_IMAGE_BUILT: ${{ needs.build-api.outputs.image }}
           WEB_IMAGE_BUILT: ${{ needs.build-web.outputs.image }}
           GIT_SHA: ${{ github.sha }}
-          RELEASE_MESSAGE: ${{ github.event.inputs.release_message || '' }}
+          RELEASE_MESSAGE: ${{ github.event.head_commit.message || '' }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
@@ -642,6 +620,7 @@ jobs:
 
           short="${GIT_SHA::12}"
           rid="$(date -u +%Y%m%dT%H%M%SZ)-${short}"
+          msg="$(printf '%s' "${RELEASE_MESSAGE:-}" | head -n1)"
 
           release="$(jq -nc \
             --arg id "$rid" \
@@ -649,7 +628,7 @@ jobs:
             --arg short "$short" \
             --arg api "$api_image" \
             --arg web "$web_image" \
-            --arg msg "$RELEASE_MESSAGE" \
+            --arg msg "$msg" \
             '{
               id: $id,
               git_sha: $sha,
