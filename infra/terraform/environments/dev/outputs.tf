@@ -71,6 +71,34 @@ output "database_url_public" {
   sensitive   = true
 }
 
+output "valkey_cluster_id" {
+  value = module.valkey.cluster_id
+}
+
+output "valkey_private_host" {
+  value = module.valkey.private_host
+}
+
+output "valkey_public_host" {
+  value = module.valkey.host
+}
+
+output "valkey_port" {
+  value = module.valkey.port
+}
+
+output "redis_url_private" {
+  description = "Private REDIS_URL (also injected into pool user-data)."
+  value       = module.valkey.private_redis_url
+  sensitive   = true
+}
+
+output "redis_url_public" {
+  description = "Ops REDIS_URL (requires Valkey firewall IP allow)."
+  value       = module.valkey.public_redis_url
+  sensitive   = true
+}
+
 output "cloudflare_zone_ids" {
   value = module.cloudflare_dns.zone_ids
 }

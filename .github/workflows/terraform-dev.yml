@@ -21,7 +21,7 @@ on:
         type: boolean
         default: false
       wire_pool_database_url:
-        description: "After apply, write database_url_private into every pool Droplet .env and restart api"
+        description: "After apply, write private DATABASE_URL + REDIS_URL into every pool Droplet .env and restart api"
         type: boolean
         default: false
 
@@ -136,7 +136,7 @@ jobs:
           echo "health_url=$(terraform output -raw health_url)"
           echo "Set GitHub secret LOADBALANCER_IP to the load balancer IP above."
 
-      - name: Export private DATABASE_URL
+      - name: Export private DATABASE_URL + REDIS_URL
         if: inputs.wire_pool_database_url
         id: dburl
         env:
@@ -145,17 +145,21 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         run: |
           url="$(terraform output -raw database_url_private)"
+          redis="$(terraform output -raw redis_url_private)"
           echo "::add-mask::$url"
+          echo "::add-mask::$redis"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "redis=$redis" >> "$GITHUB_OUTPUT"
           echo "pool_tag=$(terraform output -raw pool_tag)" >> "$GITHUB_OUTPUT"
 
-      - name: Wire DATABASE_URL on all pool hosts
+      - name: Wire DATABASE_URL + REDIS_URL on all pool hosts
         if: inputs.wire_pool_database_url
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
           DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           DATABASE_URL: ${{ steps.dburl.outputs.url }}
+          REDIS_URL: ${{ steps.dburl.outputs.redis }}
           POOL_TAG: ${{ steps.dburl.outputs.pool_tag }}
         working-directory: ${{ github.workspace }}
         run: |
@@ -166,15 +170,19 @@ jobs:
           set -euo pipefail
           cd /opt/sailing-plans
           touch .env
-          awk -v url="${DATABASE_URL}" '
-            BEGIN { done=0 }
-            /^DATABASE_URL=/ { print "DATABASE_URL=" url; done=1; next }
+          awk -v url="${DATABASE_URL}" -v redis="${REDIS_URL}" '
+            BEGIN { db=0; rd=0 }
+            /^DATABASE_URL=/ { print "DATABASE_URL=" url; db=1; next }
+            /^REDIS_URL=/ { print "REDIS_URL=" redis; rd=1; next }
             { print }
-            END { if (!done) print "DATABASE_URL=" url }
+            END {
+              if (!db) print "DATABASE_URL=" url
+              if (!rd) print "REDIS_URL=" redis
+            }
           ' .env > .env.tmp && mv .env.tmp .env
           chmod 600 .env
           docker compose rm -sf db 2>/dev/null || true
-          docker compose up -d --no-deps --remove-orphans api || true
+          docker compose up -d --no-deps --force-recreate --remove-orphans api || true
           for i in \$(seq 1 30); do
             if curl -fsS http://127.0.0.1/health; then
               exit 0

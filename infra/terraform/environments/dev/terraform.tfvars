@@ -24,6 +24,11 @@ db_app_user       = "sailing"
 # db_allowed_ip_addresses = ["1.2.3.4"]
 db_allowed_ip_addresses = []
 
+valkey_cluster_name         = "sailing-plans-valkey-dev"
+valkey_engine_version       = "8"
+valkey_size                 = "db-s-1vcpu-1gb"
+valkey_allowed_ip_addresses = []
+
 # Droplet Autoscale Pool + Load Balancer
 pool_min_instances          = 2
 pool_max_instances          = 4

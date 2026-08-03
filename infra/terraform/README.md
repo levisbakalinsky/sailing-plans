@@ -11,6 +11,7 @@ infra/terraform/
     cloudflare_dns/    # Apex/www DNS + SSL settings → Load Balancer
     app_host/          # Legacy single Droplet (staging scaffold only)
     postgres/          # Managed Postgres + DB firewall
+    valkey/            # Managed Valkey (Redis-compatible) + firewall
   environments/
     dev/               # Development root module (applied)
     staging/           # Scaffold only (not applied)
@@ -20,7 +21,7 @@ infra/terraform/
 
 | Concern | Tool |
 | --- | --- |
-| Autoscale pool, LB, managed Postgres, firewalls, VPC, tags | Terraform |
+| Autoscale pool, LB, managed Postgres + Valkey, firewalls, VPC, tags | Terraform |
 | Cloudflare DNS (apex/www → LB) + SSL mode | Terraform (`cloudflare_dns`) |
 | `.net`/`.org` → `.com` 301 redirects | Cloudflare Single Redirects (dashboard) + Caddyfile backup |
 | Container image build + rolling `docker compose` deploy | GitHub Actions (`Deploy Development`) |
@@ -98,3 +99,9 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 - Cluster: `sailing-plans-pg-dev` (Postgres 18, same VPC)
 - Trusted sources: pool Droplet **tag**
 - `DATABASE_URL` injected via cloud-init from `database_url_private`
+
+## Managed Valkey (dev)
+
+- Cluster: `sailing-plans-valkey-dev` (Valkey 8, `db-s-1vcpu-1gb`, same VPC)
+- Trusted sources: pool Droplet **tag**
+- `REDIS_URL` injected via cloud-init from `redis_url_private` (~$15/mo)

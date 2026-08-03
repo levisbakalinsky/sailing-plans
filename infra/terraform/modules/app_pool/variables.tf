@@ -70,6 +70,13 @@ variable "database_url" {
   sensitive   = true
 }
 
+variable "redis_url" {
+  description = "Private REDIS_URL (Valkey) injected into Droplet user-data."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "ghcr_username" {
   type    = string
   default = "levisbakalinsky"

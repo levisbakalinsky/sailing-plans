@@ -12,6 +12,7 @@ locals {
 
   env_file = <<-EOT
     DATABASE_URL=${var.database_url}
+    REDIS_URL=${var.redis_url}
     CLERK_SECRET_KEY=sk_test_replace_me
     CLERK_PUBLISHABLE_KEY=pk_test_replace_me
     NEXT_PUBLIC_API_URL=/api

@@ -87,6 +87,28 @@ variable "db_allowed_ip_addresses" {
   default     = []
 }
 
+variable "valkey_cluster_name" {
+  type    = string
+  default = "sailing-plans-valkey-dev"
+}
+
+variable "valkey_engine_version" {
+  type    = string
+  default = "8"
+}
+
+variable "valkey_size" {
+  description = "Managed Valkey size slug (DEV default is smallest)."
+  type        = string
+  default     = "db-s-1vcpu-1gb"
+}
+
+variable "valkey_allowed_ip_addresses" {
+  description = "Extra IPs trusted by the Valkey firewall (ops)."
+  type        = list(string)
+  default     = []
+}
+
 variable "pool_min_instances" {
   type    = number
   default = 2

@@ -29,6 +29,27 @@ module "postgres" {
   ]
 }
 
+module "valkey" {
+  source = "../../modules/valkey"
+
+  name                 = var.valkey_cluster_name
+  environment          = var.environment
+  project              = var.project
+  region               = var.region
+  engine_version       = var.valkey_engine_version
+  size                 = var.valkey_size
+  node_count           = 1
+  vpc_uuid             = var.vpc_uuid
+  droplet_ids          = []
+  allowed_tags         = [local.pool_tag]
+  allowed_ip_addresses = var.valkey_allowed_ip_addresses
+
+  tags = [
+    "owner:${var.owner}",
+    "cost-center:${var.cost_center}",
+  ]
+}
+
 module "app_pool" {
   source = "../../modules/app_pool"
 
@@ -47,6 +68,7 @@ module "app_pool" {
   pool_tag               = local.pool_tag
   allowed_ssh_cidrs      = var.allowed_ssh_cidrs
   database_url           = module.postgres.private_database_url
+  redis_url              = module.valkey.private_redis_url
   ghcr_username          = var.ghcr_username
   ghcr_pull_token        = var.ghcr_pull_token
   api_image              = var.api_image
@@ -60,7 +82,7 @@ module "app_pool" {
     "cost-center:${var.cost_center}",
   ]
 
-  depends_on = [module.postgres]
+  depends_on = [module.postgres, module.valkey]
 }
 
 module "cloudflare_dns" {
