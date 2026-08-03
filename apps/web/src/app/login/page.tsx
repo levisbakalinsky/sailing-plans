@@ -1,9 +1,10 @@
-import { LogoMark } from '../components/Logo';
+import Link from 'next/link';
+import { LogoMark } from '../../components/Logo';
 
-export default function HomePage() {
+export default function LoginPage() {
   return (
     <main className="shell">
-      <section className="hero" aria-label="Sailing Plans">
+      <section className="hero" aria-label="Log in">
         <div className="hero-media" aria-hidden="true">
           <div className="hero-wash" />
           <div className="hero-glow hero-glow-a" />
@@ -15,13 +16,12 @@ export default function HomePage() {
         <div className="hero-copy">
           <div className="hero-brand-row">
             <LogoMark className="hero-mark" title="Sailing Plans" />
-            <p className="eyebrow">Coming soon</p>
+            <p className="eyebrow">Log in</p>
           </div>
-          <h1 className="brand">Sailing Plans</h1>
-          <p className="headline">Plans that hold when the day gets loud.</p>
-          <p className="support">
-            A quiet place to capture what matters, choose the next step, and
-            find your way back, without the noise.
+          <h1 className="brand brand-compact">Not open yet</h1>
+          <p className="headline">
+            Sign-in will be here when we launch. Join the waitlist for first
+            word.
           </p>
           <div className="cta-row">
             <a
@@ -30,9 +30,9 @@ export default function HomePage() {
             >
               Join the waitlist
             </a>
-            <a className="cta cta-secondary" href="/login">
-              Log in
-            </a>
+            <Link className="cta cta-secondary" href="/">
+              Back home
+            </Link>
           </div>
         </div>
 
