@@ -32,7 +32,7 @@ infra/terraform/
 - `DIGITALOCEAN_TOKEN` in the environment
 - `CLOUDFLARE_API_TOKEN` (Zone DNS Edit + Zone Settings Edit on sailingplans zones)
 - Existing DO SSH key named `sailing-plans-do-deploy` (or override `ssh_key_name`)
-- Optional: `TF_VAR_ghcr_pull_token` / `GHCR_PULL_TOKEN` for private GHCR pulls on Droplet boot
+- Optional: `TF_VAR_ghcr_pull_token` / `GHCR_PULL_TOKEN` for GHCR login on Droplet boot (packages are public; token is a bootstrap fallback)
 
 ## Dev workflow
 

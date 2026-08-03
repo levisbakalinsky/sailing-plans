@@ -3,12 +3,6 @@ variable "domains" {
   type        = list(string)
 }
 
-variable "canonical_domain" {
-  description = "Primary hostname. Other listed domains get 301 redirects here when set."
-  type        = string
-  default     = ""
-}
-
 variable "origin_ipv4" {
   description = "Origin IPv4 (DigitalOcean Load Balancer)."
   type        = string
