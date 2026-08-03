@@ -47,7 +47,7 @@ Public (Cloudflare → LB):
 - https://sailingplans.com/health
 - https://sailingplans.com/api/health
 
-Also live: `.net` / `.org` (same stack). `.us` zone exists but needs nameserver activation.
+Also live: `.net` / `.org` (same stack).
 
 Direct LB (ops):
 

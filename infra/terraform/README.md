@@ -102,7 +102,6 @@ Public hostnames (proxied / orange-cloud) point at the DO Load Balancer:
 - https://sailingplans.com / https://www.sailingplans.com
 - https://sailingplans.net / https://www.sailingplans.net
 - https://sailingplans.org / https://www.sailingplans.org
-- https://sailingplans.us / https://www.sailingplans.us (zone added; needs active NS delegation)
 
 SSL mode is **Flexible** (Cloudflare HTTPS → origin HTTP on LB `:80`) with **Always Use HTTPS** on. Upgrade to Full (Strict) later with a Cloudflare Origin CA cert on Caddy.
 

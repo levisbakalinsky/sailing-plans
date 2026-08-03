@@ -141,6 +141,5 @@ variable "cloudflare_domains" {
     "sailingplans.com",
     "sailingplans.net",
     "sailingplans.org",
-    "sailingplans.us",
   ]
 }
