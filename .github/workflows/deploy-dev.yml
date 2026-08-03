@@ -9,7 +9,10 @@ on:
       - "apps/api/**"
       - "apps/web/**"
       - "packages/**"
-      - "deploy/**"
+      # Only app runtime config — not deploy/scripts (ops helpers must not recreate idle pools).
+      - "deploy/docker-compose.yml"
+      - "deploy/Caddyfile"
+      - "deploy/bootstrap.sh"
       - "pnpm-lock.yaml"
       - ".github/workflows/deploy-dev.yml"
   workflow_dispatch:
