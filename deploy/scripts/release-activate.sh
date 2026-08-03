@@ -139,7 +139,7 @@ if [[ "$FINALIZE" == "true" ]]; then
     "$SCRIPT_DIR/autoscale-delete.sh" "$active_pool" "$active" "$inactive"
   fi
 else
-  echo "Idle color $active kept. Use Ops Development → teardown-idle when done."
+  echo "Idle color $active kept. Use Ops (Development) → teardown-idle when done."
 fi
 
 echo "Activated $rel_id on $inactive"

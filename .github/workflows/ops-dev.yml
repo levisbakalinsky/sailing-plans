@@ -1,12 +1,12 @@
-name: Ops Development
+name: Ops (Development)
 
-# Manual ops for the blue/green pool. Shares deploy concurrency so it cannot
-# race Deploy/Release cutovers.
+# Platform / on-call only — not day-to-day feature work. See docs/deploy-ops.md
+# Shares deploy concurrency so it cannot race Ship / Release cutovers.
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: Ops action
+        description: "status (safe) · teardown-idle (save cost) · set-lb-tag / set-min / destroy-orphans (careful)"
         required: true
         type: choice
         default: status
@@ -17,23 +17,23 @@ on:
           - teardown-idle
           - destroy-orphans
       tag:
-        description: "For set-lb-tag: color tag (blue/green)"
+        description: "set-lb-tag only: full color tag (from status / resolve-colors)"
         required: false
         type: string
         default: ""
       pool:
-        description: "For set-min: which pool"
+        description: "set-min only: which pool"
         type: choice
         default: blue
         options: [blue, green]
       min:
-        description: "For set-min: min_instances (>= 1)"
+        description: "set-min only: min_instances (>= 1)"
         type: string
         default: "2"
       dry_run:
-        description: "For destroy-orphans: list only"
+        description: "destroy-orphans: list only (recommended first)"
         type: boolean
-        default: false
+        default: true
 
 concurrency:
   group: deploy-dev-pool

@@ -1,7 +1,8 @@
-name: Deploy Development
+name: Ship (Development)
 
-# Blue/green application deploy.
-# Run Migrate Development separately before this when schema changes.
+# Ships app images to development (blue/green under the hood).
+# Developers: leave advanced inputs false. See docs/shipping.md
+# Schema changes: run "Migrate DB (Development)" first.
 on:
   push:
     branches: [main]
@@ -18,7 +19,7 @@ on:
   workflow_dispatch:
     inputs:
       component:
-        description: Which component to deploy
+        description: "What to ship (usually leave as all)"
         required: true
         type: choice
         default: all
@@ -28,16 +29,16 @@ on:
           - web
           - proxy
       release_message:
-        description: Optional note stored on this release in the ledger
+        description: "Optional note in release history"
         required: false
         type: string
         default: ""
       finalize:
-        description: After cutover, delete the old color
+        description: "⚠ Advanced — delete old servers after ship (leave false; use Ops teardown-idle later if needed)"
         type: boolean
         default: false
       skip_cutover:
-        description: Stage onto inactive color only (no LB flip) — activate later via Release Development
+        description: "⚠ Advanced — stage only, do not send traffic yet (leave false)"
         type: boolean
         default: false
 
@@ -529,7 +530,7 @@ jobs:
           INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
           # Best-effort: GITHUB_TOKEN often cannot write environment variables.
-          # Migrate Development resolves the active tag from the LB when needed.
+          # Migrate DB resolves the active tag from the LB when needed.
           gh variable set ACTIVE_COLOR_TAG --env development --body "$INACTIVE_TAG" || \
             echo "Could not update ACTIVE_COLOR_TAG (non-fatal); migrate will read LB tag."
 
@@ -675,5 +676,5 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          # Optional: drops instant rollback. Prefer Release Development → teardown-idle.
+          # Optional: drops instant rollback. Prefer Ops (Development) → teardown-idle.
           ./deploy/scripts/autoscale-delete.sh "$POOL_ID" "$OLD_TAG" "$KEEP_TAG"

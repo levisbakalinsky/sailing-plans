@@ -1,5 +1,6 @@
-name: Terraform Development
+name: Terraform (Development)
 
+# Platform / infra only — not day-to-day feature work. See docs/deploy-ops.md
 on:
   push:
     branches: [main]
@@ -17,15 +18,15 @@ on:
   workflow_dispatch:
     inputs:
       apply:
-        description: "Apply the plan after validate (creates/updates DO resources)"
+        description: "Apply the plan (creates/updates DO resources). Leave false to plan only."
         type: boolean
         default: false
       bootstrap_lb_blue:
-        description: "Only for first-time setup: force LB tag to blue (never use after green is live)"
+        description: "⚠ First-time setup only — force LB tag to blue (never after another color is live)"
         type: boolean
         default: false
       wire_pool_database_url:
-        description: "After apply, write private DATABASE_URL + REDIS_URL into every pool Droplet .env and restart api"
+        description: "⚠ After apply, write DATABASE_URL + REDIS_URL into every pool Droplet .env and restart api"
         type: boolean
         default: false
 

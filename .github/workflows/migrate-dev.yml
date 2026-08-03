@@ -1,12 +1,12 @@
-name: Migrate Development
+name: Migrate DB (Development)
 
-# Run database migrations separately from application deploys.
-# Typical order: Migrate Development → Deploy Development (blue/green).
+# Applies Prisma migrations. Run this before Ship when schema changes.
+# Developers: docs/shipping.md — leave api_image empty unless you know you need it.
 on:
   workflow_dispatch:
     inputs:
       api_image:
-        description: "API image to run migrate from (empty = build this commit)"
+        description: "Leave empty (builds this commit). ⚠ Advanced: pin a specific API image"
         required: false
         type: string
         default: ""

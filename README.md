@@ -30,7 +30,7 @@ packages/
 
 ## Prerequisites
 
-- Node.js 22+
+- Node.js 24+ (see `.nvmrc`)
 - pnpm 11+
 - PostgreSQL (local or DigitalOcean Managed)
 
@@ -60,12 +60,14 @@ pnpm dev
 | `pnpm typecheck` | Typecheck all packages |
 | `pnpm test` | Run tests |
 
-## Deploy (development)
+## CI & shipping
 
-| Layer | Tool | Docs |
+| What | Where | Docs |
 | --- | --- | --- |
-| Infra (autoscale pools, LB, Postgres, Valkey, DNS) | Terraform | [infra/terraform/README.md](infra/terraform/README.md) |
-| Migrate / deploy / release / ops | GitHub Actions | [docs/deploy-droplet.md](docs/deploy-droplet.md) |
+| PR checks (typecheck / test / build) | GitHub Actions → **CI** | automatic on PRs |
+| How to ship / roll back | GitHub Actions | [docs/shipping.md](docs/shipping.md) |
+| Platform deploy ops (blue/green, pools) | GitHub Actions | [docs/deploy-ops.md](docs/deploy-ops.md) |
+| Infra (LB, Postgres, Valkey, DNS) | Terraform | [infra/terraform/README.md](infra/terraform/README.md) |
 
 ## Linear
 

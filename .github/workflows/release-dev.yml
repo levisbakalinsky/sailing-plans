@@ -1,11 +1,12 @@
-name: Release Development
+name: Rollback / Releases (Development)
 
-# Release ledger: list history and activate any past build by id/sha.
+# List release history or activate a past build (rollback / jump).
+# Developers: list → copy id → activate. See docs/shipping.md
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: list | activate | status | seed-live
+        description: "list = history · activate = rollback/jump · status = diagnose · seed-live = one-time bootstrap"
         required: true
         type: choice
         default: list
@@ -15,12 +16,12 @@ on:
           - status
           - seed-live
       release:
-        description: "For activate: release id or git sha (see action=list)"
+        description: "For activate only: paste release id or git sha from list"
         required: false
         type: string
         default: ""
       finalize:
-        description: After activate, delete the newly-idle color
+        description: "⚠ Advanced — delete idle servers after activate (leave false)"
         type: boolean
         default: false
 
@@ -141,7 +142,7 @@ jobs:
               ;;
 
             *)
-              echo "Unknown action: $ACTION (use Ops Development for teardown-idle)" >&2
+              echo "Unknown action: $ACTION (use Ops (Development) for teardown-idle)" >&2
               exit 2
               ;;
           esac

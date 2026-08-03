@@ -37,7 +37,7 @@ locals {
       echo "${var.ghcr_pull_token}" | docker login ghcr.io -u "${var.ghcr_username}" --password-stdin
     fi
 
-    # Private GHCR images may be unavailable until GHCR_PULL_TOKEN is set or Deploy Development runs.
+    # Private GHCR images may be unavailable until GHCR_PULL_TOKEN is set or Ship (Development) runs.
     docker compose pull || echo "compose pull failed; waiting for CI deploy"
     docker compose up -d --remove-orphans || echo "compose up failed; waiting for CI deploy"
 

@@ -22,14 +22,14 @@ infra/terraform/
 | Concern | Tool |
 | --- | --- |
 | LB, firewalls, tags, Postgres, Valkey, pool *definitions* | Terraform |
-| Day-to-day idle pool create/delete + LB cutovers | GitHub Actions (Deploy / Release / Ops) |
+| Day-to-day idle pool create/delete + LB cutovers | GitHub Actions (Ship / Releases / Ops) |
 | Cloudflare DNS (apex/www → LB) + SSL mode | Terraform (`cloudflare_dns`) |
 | `.net`/`.org` → `.com` 301 redirects | Cloudflare Single Redirects (dashboard) + Caddyfile backup |
-| DB migrations | `Migrate Development` (before deploy when schema changes) |
-| App ship + release ledger | `Deploy Development` / `Release Development` |
+| DB migrations | `Migrate DB (Development)` (before ship when schema changes) |
+| App ship + release ledger | `Ship (Development)` / `Rollback / Releases (Development)` |
 | New pool member bootstrap | cloud-init (`app_pool` user-data) |
 
-See also [`docs/deploy-droplet.md`](../../docs/deploy-droplet.md).
+Developers: [`docs/shipping.md`](../../docs/shipping.md). Ops detail: [`docs/deploy-ops.md`](../../docs/deploy-ops.md).
 
 ## Prerequisites
 
@@ -92,7 +92,7 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 | Setting | Default |
 | --- | --- |
 | Active color min / max | 2 / 4 |
-| Idle color | Kept by default after cutover; tear down via **Ops Development** |
+| Idle color | Kept by default after cutover; tear down via **Ops (Development)** |
 | Size | `s-2vcpu-4gb` |
 | CPU target | 0.7 |
 | Cooldown | 10 minutes |
