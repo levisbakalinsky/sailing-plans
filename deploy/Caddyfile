@@ -1,10 +1,15 @@
-# Alternate TLDs → canonical (defense in depth; Cloudflare Page Rules also redirect).
-sailingplans.net, www.sailingplans.net, sailingplans.org, www.sailingplans.org {
+{
+	# TLS terminates at Cloudflare (Flexible). Origin speaks plain HTTP.
+	auto_https off
+}
+
+# Alternate TLDs → canonical (defense in depth; Cloudflare Single Redirects also redirect).
+http://sailingplans.net, http://www.sailingplans.net, http://sailingplans.org, http://www.sailingplans.org {
 	redir https://sailingplans.com{uri} permanent
 }
 
 # Public site + LB health checks (Host may be IP or sailingplans.com).
-sailingplans.com, www.sailingplans.com, :80 {
+:80 {
 	encode gzip
 
 	handle /api/* {
