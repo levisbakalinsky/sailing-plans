@@ -27,12 +27,17 @@ on:
           - api
           - web
           - proxy
+      release_message:
+        description: Optional note stored on this release in the ledger
+        required: false
+        type: string
+        default: ""
       finalize:
-        description: After cutover, delete the old color (disables instant rollback)
+        description: After cutover, delete the old color
         type: boolean
         default: false
       skip_cutover:
-        description: Deploy to inactive color only (no LB flip) — then use Release Development → forward
+        description: Stage onto inactive color only (no LB flip) — activate later via Release Development
         type: boolean
         default: false
 
@@ -568,22 +573,28 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Write release.json for rollback/forward
+      - name: Register release in ledger + host state
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
           DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: us-east-1
+          AWS_EC2_METADATA_DISABLED: "true"
+          RELEASE_LEDGER_URI: s3://sailing-plans-tfstate/releases/dev/ledger.json
           ACTIVE_TAG: ${{ needs.resolve-colors.outputs.active_tag }}
           INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
           API_IMAGE_BUILT: ${{ needs.build-api.outputs.image }}
           WEB_IMAGE_BUILT: ${{ needs.build-web.outputs.image }}
           GIT_SHA: ${{ github.sha }}
           CUTOVER_RESULT: ${{ needs.cutover.result }}
+          RELEASE_MESSAGE: ${{ github.event.inputs.release_message || '' }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
+          aws --version
 
-          # Prefer built images; fall back to whatever is on the inactive hosts.
           export POOL_TAG="$INACTIVE_TAG"
           host_env="$(./deploy/scripts/ssh-pool.sh --first-only -- \
             'cd /opt/sailing-plans && grep -E "^(API_IMAGE|WEB_IMAGE)=" .env || true' || true)"
@@ -595,48 +606,69 @@ jobs:
           if [[ -z "$web_image" ]]; then
             web_image="$(grep -E '^WEB_IMAGE=' <<<"$host_env" | head -n1 | cut -d= -f2- || true)"
           fi
-
-          export POOL_TAG="$ACTIVE_TAG"
-          prev_state="$(./deploy/scripts/release-state.sh get || echo '{}')"
-          pending="$(jq -nc \
-            --arg api "$api_image" \
-            --arg web "$web_image" \
-            --arg sha "$GIT_SHA" \
-            --arg color "$INACTIVE_TAG" \
-            '{api_image:$api, web_image:$web, git_sha:$sha, color:$color, deployed_at:(now|todate)}')"
-
-          if [[ "$CUTOVER_RESULT" == "success" ]]; then
-            # Cut over: new active = inactive color; previous = former active release.
-            new_state="$(jq -c --argjson pending "$pending" --arg active "$INACTIVE_TAG" --arg prev "$ACTIVE_TAG" '
-              {
-                active_color: $active,
-                previous_color: $prev,
-                active: $pending,
-                previous: (.active // {}),
-                pending: null,
-                updated_at: (now | todate),
-                last_action: "deploy-cutover"
-              }
-            ' <<<"$prev_state")"
-            export POOL_TAG="$INACTIVE_TAG"
-          else
-            # skip_cutover (or cutover skipped): park build as pending for Release → forward.
-            new_state="$(jq -c --argjson pending "$pending" --arg active "$ACTIVE_TAG" '
-              .active_color = $active
-              | .pending = $pending
-              | .updated_at = (now | todate)
-              | .last_action = "deploy-pending"
-            ' <<<"$prev_state")"
-            export POOL_TAG="$ACTIVE_TAG"
+          if [[ -z "$api_image" || -z "$web_image" ]]; then
+            echo "Cannot register release without API_IMAGE and WEB_IMAGE" >&2
+            exit 1
           fi
 
+          short="${GIT_SHA::12}"
+          # UTC id: sortable + unique per sha deploy.
+          rid="$(date -u +%Y%m%dT%H%M%SZ)-${short}"
+          live=true
+          if [[ "$CUTOVER_RESULT" != "success" ]]; then
+            live=false
+          fi
+
+          release="$(jq -nc \
+            --arg id "$rid" \
+            --arg sha "$GIT_SHA" \
+            --arg short "$short" \
+            --arg api "$api_image" \
+            --arg web "$web_image" \
+            --arg msg "$RELEASE_MESSAGE" \
+            --argjson live "$live" \
+            '{
+              id: $id,
+              git_sha: $sha,
+              git_sha_short: $short,
+              api_image: $api,
+              web_image: $web,
+              message: $msg,
+              live: $live,
+              created_at: (now|todate),
+              source: "deploy"
+            }')"
+          echo "$release" | jq .
+          ./deploy/scripts/release-ledger.sh append "$release"
+          if [[ "$live" == "true" ]]; then
+            ./deploy/scripts/release-ledger.sh set-current "$rid"
+          fi
+
+          host_state="$(jq -nc \
+            --argjson rel "$release" \
+            --arg active "$([[ "$live" == "true" ]] && echo "$INACTIVE_TAG" || echo "$ACTIVE_TAG")" \
+            --arg prev "$ACTIVE_TAG" \
+            --argjson live "$live" \
+            '{
+              active_color: $active,
+              previous_color: $prev,
+              active: (if $live then $rel else null end),
+              pending: (if $live then null else $rel end),
+              updated_at: (now|todate),
+              last_action: (if $live then "deploy-cutover" else "deploy-staged" end)
+            }')"
           tmp="$(mktemp)"
-          echo "$new_state" | jq . | tee "$tmp"
+          echo "$host_state" | jq . | tee "$tmp"
+          if [[ "$live" == "true" ]]; then
+            export POOL_TAG="$INACTIVE_TAG"
+          else
+            export POOL_TAG="$ACTIVE_TAG"
+          fi
           ./deploy/scripts/release-state.sh put "$tmp"
-          # Also persist onto the inactive fleet so either color can serve state.
           export POOL_TAG="$INACTIVE_TAG"
           ./deploy/scripts/release-state.sh put "$tmp" || true
           rm -f "$tmp"
+          echo "Registered release $rid (live=$live)"
 
   finalize:
     needs: [resolve-colors, cutover, record-release]

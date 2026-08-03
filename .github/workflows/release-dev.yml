@@ -1,23 +1,26 @@
 name: Release Development
 
-# Roll back / forward between blue-green colors, or tear down the idle color.
-# Instant flip when the other color still has healthy hosts; otherwise rebuild
-# from release.json image pins (rollback only).
+# Release management for dev: list history, activate any past build by id/sha.
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: What to do
+        description: list | activate | status | teardown-idle
         required: true
         type: choice
-        default: rollback
+        default: list
         options:
-          - rollback
-          - forward
+          - list
+          - activate
           - status
           - teardown-idle
+      release:
+        description: "Release id or git sha prefix (required for activate). Example: 20260803T052130Z-a1b2c3d4e5f6 or a1b2c3d4e5f6"
+        required: false
+        type: string
+        default: ""
       finalize:
-        description: After rollback/forward, delete the newly-idle color
+        description: After activate, delete the newly-idle color
         type: boolean
         default: false
 
@@ -33,6 +36,9 @@ env:
   LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
   AUTOSCALE_POOL_ID_BLUE: ${{ vars.AUTOSCALE_POOL_ID_BLUE }}
   AUTOSCALE_POOL_ID_GREEN: ${{ vars.AUTOSCALE_POOL_ID_GREEN }}
+  RELEASE_LEDGER_URI: s3://sailing-plans-tfstate/releases/dev/ledger.json
+  AWS_DEFAULT_REGION: us-east-1
+  AWS_EC2_METADATA_DISABLED: "true"
 
 jobs:
   run:
@@ -45,181 +51,88 @@ jobs:
             deploy/scripts
           sparse-checkout-cone-mode: true
 
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Install tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y jq
+          # awscli v2 is usually preinstalled on ubuntu-latest; ensure present
+          aws --version
 
-      - name: Release control
+      - name: Release management
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
           DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           LB_HOST: ${{ secrets.LOADBALANCER_IP }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           ACTION: ${{ github.event.inputs.action }}
+          RELEASE_REF: ${{ github.event.inputs.release }}
           FINALIZE: ${{ github.event.inputs.finalize }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
 
-          active="$(./deploy/scripts/lb-get-tag.sh)"
-          if [[ "$active" == "$SHARED_POOL_TAG" || -z "$active" ]]; then
-            active="$BLUE_TAG"
-          fi
-          if [[ "$active" == "$BLUE_TAG" ]]; then
-            inactive="$GREEN_TAG"
-            active_pool="$AUTOSCALE_POOL_ID_BLUE"
-            inactive_pool="$AUTOSCALE_POOL_ID_GREEN"
-            inactive_name="sailing-plans-app-dev-green"
-            active_name="sailing-plans-app-dev"
-          elif [[ "$active" == "$GREEN_TAG" ]]; then
-            inactive="$BLUE_TAG"
-            active_pool="$AUTOSCALE_POOL_ID_GREEN"
-            inactive_pool="$AUTOSCALE_POOL_ID_BLUE"
-            inactive_name="sailing-plans-app-dev"
-            active_name="sailing-plans-app-dev-green"
-          else
-            echo "Unexpected LB tag: $active" >&2
-            exit 1
-          fi
-          echo "LB active=$active inactive=$inactive"
-
-          export POOL_TAG="$active"
-          state="$(./deploy/scripts/release-state.sh get || echo '{}')"
-          echo "Current release state:"
-          echo "$state" | jq .
-
-          if [[ "$ACTION" == "status" ]]; then
-            echo "=== inactive color hosts ==="
-            POOL_TAG="$inactive" ./deploy/scripts/pool-hosts.sh || true
+          if [[ "$ACTION" == "list" ]]; then
+            echo "=== Dev release ledger (* = current) ==="
+            ./deploy/scripts/release-ledger.sh list
             exit 0
           fi
 
-          resolve_pool_id() {
-            local name="$1" fallback="$2"
-            local found
-            found="$(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
-              "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
-              | jq -r --arg n "$name" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
-            echo "${found:-$fallback}"
-          }
+          if [[ "$ACTION" == "status" ]]; then
+            echo "=== LB / colors ==="
+            active="$(./deploy/scripts/lb-get-tag.sh || true)"
+            echo "LB tag: ${active:-empty}"
+            echo
+            echo "=== Current release ==="
+            ./deploy/scripts/release-ledger.sh current || echo "{}"
+            echo
+            echo "=== Recent releases ==="
+            ./deploy/scripts/release-ledger.sh list
+            echo
+            echo "=== Host release.json (active color) ==="
+            if [[ "$active" == "$BLUE_TAG" || "$active" == "$GREEN_TAG" ]]; then
+              export POOL_TAG="$active"
+            else
+              export POOL_TAG="$GREEN_TAG"
+            fi
+            ./deploy/scripts/release-state.sh get || echo '{}'
+            exit 0
+          fi
 
           if [[ "$ACTION" == "teardown-idle" ]]; then
-            pool_id="$(resolve_pool_id "$inactive_name" "$inactive_pool")"
-            ./deploy/scripts/autoscale-delete.sh "$pool_id" "$inactive" "$active"
+            active="$(./deploy/scripts/lb-get-tag.sh)"
+            if [[ "$active" == "$BLUE_TAG" ]]; then
+              inactive="$GREEN_TAG"; inactive_name="sailing-plans-app-dev-green"; keep="$BLUE_TAG"
+              fallback="$AUTOSCALE_POOL_ID_GREEN"
+            else
+              inactive="$BLUE_TAG"; inactive_name="sailing-plans-app-dev"; keep="$GREEN_TAG"
+              fallback="$AUTOSCALE_POOL_ID_BLUE"
+            fi
+            found="$(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
+              "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
+              | jq -r --arg n "$inactive_name" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
+            ./deploy/scripts/autoscale-delete.sh "${found:-$fallback}" "$inactive" "$keep"
             echo "Idle color torn down."
             exit 0
           fi
 
-          target="$inactive"
-          target_pool="$inactive_pool"
-          target_name="$inactive_name"
-          clone_from="$(resolve_pool_id "$active_name" "$active_pool")"
-
-          healthy_target=false
-          if POOL_TAG="$target" ./deploy/scripts/wait-pool-hosts.sh "$target" 1 30; then
-            healthy_target=true
+          if [[ "$ACTION" == "activate" ]]; then
+            if [[ -z "${RELEASE_REF// }" ]]; then
+              echo "action=activate requires the release input (id or git sha)." >&2
+              echo "Run action=list to see available releases." >&2
+              exit 2
+            fi
+            args=("$RELEASE_REF")
+            if [[ "$FINALIZE" == "true" ]]; then
+              args+=(--finalize)
+            fi
+            ./deploy/scripts/release-activate.sh "${args[@]}"
+            exit 0
           fi
 
-          if [[ "$healthy_target" != "true" ]]; then
-            if [[ "$ACTION" == "forward" ]]; then
-              echo "No healthy idle color to forward to." >&2
-              echo "Deploy with skip_cutover=true first, or run a normal deploy." >&2
-              exit 1
-            fi
-
-            echo "Target color $target has no healthy hosts — rebuilding previous release"
-            prev_api="$(jq -r '.previous.api_image // empty' <<<"$state")"
-            prev_web="$(jq -r '.previous.web_image // empty' <<<"$state")"
-            if [[ -z "$prev_api" || -z "$prev_web" ]]; then
-              echo "release.json missing previous.api_image/web_image; cannot rebuild." >&2
-              echo "Keep finalize=false on deploys so the other color stays available for instant rollback." >&2
-              exit 1
-            fi
-
-            out="$(./deploy/scripts/autoscale-ensure.sh \
-              "$target_pool" "$target_name" "$target" "$SHARED_POOL_TAG" "$clone_from" "$BASELINE_MIN")"
-            echo "$out"
-            new_id="$(sed -n 's/^pool_id=//p' <<<"$out" | tail -n1)"
-            if [[ "$target" == "$GREEN_TAG" ]]; then
-              gh variable set AUTOSCALE_POOL_ID_GREEN --env development --body "$new_id" || true
-            else
-              gh variable set AUTOSCALE_POOL_ID_BLUE --env development --body "$new_id" || true
-            fi
-
-            export POOL_TAG="$target"
-            ./deploy/scripts/ssh-pool.sh -- "$(cat <<EOF
-          set -euo pipefail
-          cd /opt/sailing-plans
-          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          grep -vE '^(API_IMAGE|WEB_IMAGE)=' .env > .env.tmp || true
-          { cat .env.tmp; echo "API_IMAGE=${prev_api}"; echo "WEB_IMAGE=${prev_web}"; } > .env
-          rm -f .env.tmp
-          chmod 600 .env
-          docker compose pull api web
-          docker compose up -d --remove-orphans
-          for i in \$(seq 1 60); do
-            if curl -fsS http://127.0.0.1/health >/dev/null; then exit 0; fi
-            sleep 2
-          done
-          docker compose logs --tail=80
-          exit 1
-          EOF
-            )"
-            ./deploy/scripts/wait-pool-hosts.sh "$target" "$BASELINE_MIN" 600
-          fi
-
-          echo "Flipping LB -> $target ($ACTION)"
-          ./deploy/scripts/lb-set-tag.sh "$target"
-          for i in $(seq 1 36); do
-            if curl -fsS "http://${LB_HOST}/health" >/dev/null; then
-              echo "LB healthy"
-              break
-            fi
-            sleep 5
-            if [[ "$i" -eq 36 ]]; then
-              echo "LB unhealthy after flip" >&2
-              exit 1
-            fi
-          done
-
-          export POOL_TAG="$target"
-          if [[ "$ACTION" == "rollback" ]]; then
-            new_state="$(jq -c --arg active "$target" --arg prev "$active" '
-              {
-                active_color: $active,
-                previous_color: $prev,
-                active: (.previous // .active // {}),
-                previous: (.active // {}),
-                pending: null,
-                updated_at: (now | todate),
-                last_action: "rollback"
-              }
-            ' <<<"$state")"
-          else
-            new_state="$(jq -c --arg active "$target" --arg prev "$active" '
-              {
-                active_color: $active,
-                previous_color: $prev,
-                active: (.pending // .active // {}),
-                previous: (.active // {}),
-                pending: null,
-                updated_at: (now | todate),
-                last_action: "forward"
-              }
-            ' <<<"$state")"
-          fi
-          tmp="$(mktemp)"
-          echo "$new_state" | jq . | tee "$tmp"
-          ./deploy/scripts/release-state.sh put "$tmp"
-          rm -f "$tmp"
-          gh variable set ACTIVE_COLOR_TAG --env development --body "$target" || true
-
-          if [[ "$FINALIZE" == "true" ]]; then
-            echo "Deleting newly idle color $active"
-            idle_id="$(resolve_pool_id "$active_name" "$active_pool")"
-            ./deploy/scripts/autoscale-delete.sh "$idle_id" "$active" "$target"
-          else
-            echo "Idle color $active kept for another rollback/forward."
-            echo "Use action=teardown-idle (or finalize=true) to drop back to ~2 droplets."
-          fi
+          echo "Unknown action: $ACTION" >&2
+          exit 2

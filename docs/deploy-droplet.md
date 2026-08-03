@@ -1,78 +1,77 @@
-# Deploy Development (Blue/Green)
+# Deploy Development (Blue/Green + Release Management)
 
-Development runs on DigitalOcean **Droplet Autoscale Pools** (blue + green) behind one **Load Balancer**.
+Development uses blue/green pools for **how** traffic moves, and a durable **release ledger** for **which** build is live.
 
-- **Infrastructure**: Terraform — see [`infra/terraform/README.md`](../infra/terraform/README.md)
-- **Migrations**: **Migrate Development** (run before deploy when schema changes)
-- **Application**: **Deploy Development** (blue/green)
-- **Rollback / forward**: **Release Development**
+- **Infrastructure**: Terraform
+- **Migrations**: **Migrate Development**
+- **Ship a build**: **Deploy Development** (registers a release)
+- **Pick any past build**: **Release Development** → `activate`
 
-## Order of operations
+## Release ledger
 
-1. Schema change → **Migrate Development**
-2. App change → **Deploy Development**
-3. Undo / redo traffic → **Release Development** (`rollback` / `forward`)
+Stored in Spaces: `s3://sailing-plans-tfstate/releases/dev/ledger.json`
 
-## Blue/green flow
+Each deploy creates a release like:
+
+```text
+20260803T052130Z-a1b2c3d4e5f6
+```
+
+Fields: `id`, `git_sha`, `api_image`, `web_image`, `message`, `live`, `created_at`.
+
+Keep the last **50** releases.
+
+## Day-to-day
+
+### Ship
+
+1. (If schema changed) **Migrate Development**
+2. **Deploy Development**
+   - Optional `release_message`
+   - `skip_cutover=true` → stage on idle color (`live=false`) without flipping LB
+   - Default keeps previous color up so you can switch again quickly
+
+### List history
+
+**Release Development** → action `list` (or `status`)
+
+### Activate any release (rollback / forward / jump)
+
+**Release Development** → action `activate` → set `release` to:
+
+- full id: `20260803T052130Z-a1b2c3d4e5f6`
+- or git sha prefix: `a1b2c3d4e5f6`
+
+That rebuilds the idle color with those exact images, health-checks, flips the LB, and marks the ledger current.
+
+You can activate the same older release **multiple times**; history is not a single “previous” pointer.
+
+### Tear down idle capacity
+
+**Release Development** → `teardown-idle` (or deploy/activate with `finalize=true`) when you want ~2 droplets and don’t need an instant flip.
+
+## Flows
+
+| Goal | Steps |
+| --- | --- |
+| Normal ship | Deploy Development |
+| Stage then promote | Deploy (`skip_cutover`) → Release `activate` with that release id |
+| Roll back to build N | Release `list` → `activate` + that id/sha |
+| Jump forward again | `activate` a newer id from the list |
+| Save cost | `teardown-idle` after you’re happy |
+
+## Blue/green (mechanism only)
 
 | Step | What happens |
 | --- | --- |
-| Resolve colors | Read LB tag (blue or green); other color is inactive |
-| Scale inactive | Recreate inactive pool if missing; scale to baseline (2) |
-| Deploy | Push images / proxy config only to inactive color |
-| Health-check | Inactive hosts must return `/health` 200 |
-| Cutover | Point LB at inactive color |
-| Record | Write `/opt/sailing-plans/release.json` (active + previous image pins) |
-| Finalize | Optional — delete old color (default **off** so rollback stays instant) |
+| Resolve colors | LB tag = active; other = inactive |
+| Ensure inactive | Recreate pool if missing; scale to 2 |
+| Deploy / activate | Put target images on inactive |
+| Health | `/health` 200 on baseline hosts |
+| Cutover | Flip LB tag |
+| Ledger | Append / set-current |
 
-## Rollback and forward
+## GitHub env (`development`)
 
-Use Actions → **Release Development**:
-
-| Action | Behavior |
-| --- | --- |
-| `status` | Show LB active color + release.json + idle hosts |
-| `rollback` | Flip LB to the other color if healthy; otherwise rebuild previous images from `release.json` |
-| `forward` | Flip LB to the idle color (use after deploy with `skip_cutover`, or to undo a rollback while idle still exists) |
-| `teardown-idle` | Delete the idle color pool (~2 droplets). Disables instant flip until the next deploy |
-
-**Recommended default:** leave `finalize=false` on deploy so both colors stay up after cutover. You can flip back and forth with Release Development. When you’re happy, run `teardown-idle` to cut cost.
-
-**Staged promote:** Deploy with `skip_cutover=true` → verify idle color → Release Development → `forward`.
-
-## Topology
-
-| Resource | Tag |
-| --- | --- |
-| Shared (DB/Valkey/firewall) | `sailing-plans-app-dev-pool` |
-| Blue / green | `…-pool-blue` / `…-pool-green` |
-| Baseline / max | **2 / 4** per color |
-
-## GitHub configuration
-
-Environment: **`development`**.
-
-| Secret | Purpose |
-| --- | --- |
-| `DIGITALOCEAN_TOKEN` | Autoscale / LB / droplet APIs |
-| `DROPLET_USER` / `DROPLET_SSH_KEY` | SSH deploy |
-| `LOADBALANCER_IP` | Post-cutover health checks |
-
-| Variable | Purpose |
-| --- | --- |
-| `LOADBALANCER_ID` | LB UUID for tag flip |
-| `AUTOSCALE_POOL_ID_BLUE` / `AUTOSCALE_POOL_ID_GREEN` | Pool UUIDs (refreshed when pools are recreated) |
-| `BLUE_TAG` / `GREEN_TAG` / `POOL_TAG` | Color + shared tags |
-| `BASELINE_MIN` | Default `2` |
-
-## Manual runs
-
-- **Migrate Development**
-- **Deploy Development** — `skip_cutover` / `finalize`
-- **Release Development** — `rollback` / `forward` / `teardown-idle` / `status`
-
-## URLs
-
-- https://www.sailingplans.com/
-- https://www.sailingplans.com/health
-- https://www.sailingplans.com/api/health
+Secrets: `DIGITALOCEAN_TOKEN`, `DROPLET_*`, `LOADBALANCER_IP`, `SPACES_*`  
+Vars: `LOADBALANCER_ID`, pool ids, color tags, `BASELINE_MIN`
