@@ -108,29 +108,38 @@ jobs:
     steps:
       - name: Wait for CI on this commit
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Use github.token (not secrets.GITHUB_TOKEN) so a repo secret of that
+          # name cannot override the Actions-issued token.
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           sha="${{ github.sha }}"
           echo "Waiting for CI success on $sha"
           for i in $(seq 1 120); do
-            json="$(gh run list --workflow=CI --commit "$sha" --limit 5 \
-              --json databaseId,conclusion,status,event 2>/dev/null || echo '[]')"
-            # Prefer a completed success; ignore cancelled supersedes while another runs.
+            # Query the workflow file directly — more reliable than --workflow=CI name match.
+            if ! json="$(gh api "repos/${GH_REPO}/actions/workflows/ci.yml/runs?head_sha=${sha}&per_page=5" \
+              --jq '[.workflow_runs[] | {databaseId: .id, conclusion, status, event}]')"; then
+              echo "gh api failed (attempt $i); retrying..." >&2
+              sleep 10
+              continue
+            fi
             success="$(jq -r '[.[] | select(.conclusion=="success")] | length' <<<"$json")"
             if [[ "$success" -gt 0 ]]; then
               echo "CI succeeded"
               exit 0
             fi
             failed="$(jq -r '[.[] | select(.conclusion=="failure")] | length' <<<"$json")"
-            running="$(jq -r '[.[] | select(.status=="in_progress" or .status=="queued" or .status=="pending")] | length' <<<"$json")"
+            running="$(jq -r '[.[] | select(.status=="in_progress" or .status=="queued" or .status=="pending" or .status=="waiting")] | length' <<<"$json")"
             if [[ "$failed" -gt 0 && "$running" -eq 0 ]]; then
               echo "CI failed for $sha" >&2
               jq -r '.[] | select(.conclusion=="failure") | "\(.databaseId) \(.conclusion)"' <<<"$json" >&2 || true
               exit 1
             fi
-            if [[ "$running" -eq 0 && "$success" -eq 0 && "$failed" -eq 0 && "$i" -gt 6 ]]; then
+            # Allow ~3 minutes for the CI run to appear before failing closed.
+            if [[ "$running" -eq 0 && "$success" -eq 0 && "$failed" -eq 0 && "$i" -gt 18 ]]; then
               echo "No CI run found for $sha after waiting — failing closed" >&2
+              echo "last payload: $json" >&2
               exit 1
             fi
             sleep 10
