@@ -21,7 +21,7 @@ export default function HomePage() {
           <p className="headline">Plans that hold when the day gets loud.</p>
           <p className="support">
             A quiet place to capture what matters, choose the next step, and
-            find your way back—without the noise.
+            find your way back, without the noise.
           </p>
           <div className="cta-row">
             <a
