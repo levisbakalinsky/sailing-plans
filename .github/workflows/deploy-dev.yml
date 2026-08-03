@@ -31,6 +31,7 @@ env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sailing-plans
   APP_DIR: /opt/sailing-plans
+  POOL_TAG: sailing-plans-app-dev-pool
 
 jobs:
   changes:
@@ -61,6 +62,7 @@ jobs:
               - 'deploy/Caddyfile'
               - 'deploy/docker-compose.yml'
               - 'deploy/bootstrap.sh'
+              - 'deploy/scripts/**'
 
       - name: Resolve components
         id: select
@@ -161,37 +163,76 @@ jobs:
       contents: read
       packages: read
     steps:
-      - name: Deploy API container
-        uses: appleboy/ssh-action@v1.2.5
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Deploy API to all pool hosts
         env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           API_IMAGE: ${{ needs.build-api.outputs.image }}
-        with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          envs: GITHUB_TOKEN,GITHUB_ACTOR,API_IMAGE
-          script: |
-            set -euo pipefail
-            cd /opt/sailing-plans
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-            grep -vE '^API_IMAGE=' .env > .env.tmp || true
-            { cat .env.tmp; echo "API_IMAGE=${API_IMAGE}"; } > .env
-            rm -f .env.tmp
-            chmod 600 .env
-            docker compose pull api
-            docker compose up -d --remove-orphans api
-            docker compose exec -T api npx prisma migrate deploy
-            for i in $(seq 1 30); do
-              if curl -fsS http://127.0.0.1/health; then
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "API health check failed"
-            docker compose logs --tail=80 api
+          POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+
+          ./deploy/scripts/ssh-pool.sh -- "$(cat <<EOF
+          set -euo pipefail
+          cd /opt/sailing-plans
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          grep -vE '^API_IMAGE=' .env > .env.tmp || true
+          { cat .env.tmp; echo "API_IMAGE=${API_IMAGE}"; } > .env
+          rm -f .env.tmp
+          chmod 600 .env
+          docker compose pull api
+          docker compose up -d --remove-orphans api
+          for i in \$(seq 1 30); do
+            if curl -fsS http://127.0.0.1/health; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "API health check failed"
+          docker compose logs --tail=80 api
+          exit 1
+          EOF
+          )"
+
+          ./deploy/scripts/ssh-pool.sh --first-only -- "$(cat <<'EOF'
+          set -euo pipefail
+          cd /opt/sailing-plans
+          docker compose exec -T api npx prisma migrate deploy
+          EOF
+          )"
+
+      - name: Verify via load balancer
+        env:
+          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
+          FALLBACK_HOST: ${{ secrets.DROPLET_HOST }}
+        run: |
+          set -euo pipefail
+          host="${LB_HOST:-$FALLBACK_HOST}"
+          if [[ -z "$host" ]]; then
+            echo "Set LOADBALANCER_IP (or DROPLET_HOST) in the development environment" >&2
             exit 1
+          fi
+          for i in $(seq 1 30); do
+            if curl -fsS "http://${host}/health"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "LB health check failed for ${host}"
+          exit 1
 
   deploy-web:
     needs: [changes, build-web]
@@ -202,36 +243,68 @@ jobs:
       contents: read
       packages: read
     steps:
-      - name: Deploy Web container
-        uses: appleboy/ssh-action@v1.2.5
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Deploy Web to all pool hosts
         env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           WEB_IMAGE: ${{ needs.build-web.outputs.image }}
-        with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          envs: GITHUB_TOKEN,GITHUB_ACTOR,WEB_IMAGE
-          script: |
-            set -euo pipefail
-            cd /opt/sailing-plans
-            echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-            grep -vE '^WEB_IMAGE=' .env > .env.tmp || true
-            { cat .env.tmp; echo "WEB_IMAGE=${WEB_IMAGE}"; } > .env
-            rm -f .env.tmp
-            chmod 600 .env
-            docker compose pull web
-            docker compose up -d --remove-orphans web
-            for i in $(seq 1 30); do
-              if curl -fsS -o /dev/null http://127.0.0.1/; then
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "Web health check failed"
-            docker compose logs --tail=80 web
+          POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/ssh-pool.sh -- "$(cat <<EOF
+          set -euo pipefail
+          cd /opt/sailing-plans
+          echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
+          grep -vE '^WEB_IMAGE=' .env > .env.tmp || true
+          { cat .env.tmp; echo "WEB_IMAGE=${WEB_IMAGE}"; } > .env
+          rm -f .env.tmp
+          chmod 600 .env
+          docker compose pull web
+          docker compose up -d --remove-orphans web
+          for i in \$(seq 1 30); do
+            if curl -fsS -o /dev/null http://127.0.0.1/; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Web health check failed"
+          docker compose logs --tail=80 web
+          exit 1
+          EOF
+          )"
+
+      - name: Verify via load balancer
+        env:
+          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
+          FALLBACK_HOST: ${{ secrets.DROPLET_HOST }}
+        run: |
+          set -euo pipefail
+          host="${LB_HOST:-$FALLBACK_HOST}"
+          if [[ -z "$host" ]]; then
+            echo "Set LOADBALANCER_IP (or DROPLET_HOST) in the development environment" >&2
             exit 1
+          fi
+          for i in $(seq 1 30); do
+            if curl -fsS -o /dev/null "http://${host}/"; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "LB web check failed for ${host}"
+          exit 1
 
   deploy-proxy:
     needs: changes
@@ -241,41 +314,74 @@ jobs:
     permissions:
       contents: read
     steps:
-      - name: Checkout deploy assets
-        uses: actions/checkout@v7
+      - uses: actions/checkout@v7
         with:
           sparse-checkout: |
             deploy
           sparse-checkout-cone-mode: true
 
-      - name: Sync compose + Caddyfile
-        uses: appleboy/scp-action@v0.1.7
-        with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          source: "deploy/docker-compose.yml,deploy/Caddyfile"
-          target: /opt/sailing-plans
-          strip_components: 1
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Reload proxy stack
-        uses: appleboy/ssh-action@v1.2.5
-        with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          script: |
-            set -euo pipefail
-            cd /opt/sailing-plans
-            docker compose up -d --remove-orphans caddy
-            # Stop legacy on-box Postgres if present (managed DB is source of truth).
-            docker compose rm -sf db 2>/dev/null || true
-            for i in $(seq 1 30); do
-              if curl -fsS http://127.0.0.1/health >/dev/null; then
-                exit 0
-              fi
-              sleep 2
-            done
-            echo "Proxy health check failed"
-            docker compose logs --tail=80 caddy
+      - name: Sync compose + Caddyfile to all pool hosts
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          KEY_PATH="$(mktemp)"
+          printf '%s\n' "$DROPLET_SSH_KEY" >"$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          mapfile -t HOSTS < <(./deploy/scripts/pool-hosts.sh)
+          if [[ "${#HOSTS[@]}" -eq 0 ]]; then
+            echo "No pool hosts for tag $POOL_TAG" >&2
             exit 1
+          fi
+          for host in "${HOSTS[@]}"; do
+            echo "Syncing to $host"
+            scp -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
+              -i "$KEY_PATH" \
+              deploy/docker-compose.yml deploy/Caddyfile \
+              "${DROPLET_USER}@${host}:/opt/sailing-plans/"
+          done
+          rm -f "$KEY_PATH"
+
+          ./deploy/scripts/ssh-pool.sh -- "$(cat <<'EOF'
+          set -euo pipefail
+          cd /opt/sailing-plans
+          docker compose up -d --remove-orphans caddy
+          docker compose rm -sf db 2>/dev/null || true
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1/health >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Proxy health check failed"
+          docker compose logs --tail=80 caddy
+          exit 1
+          EOF
+          )"
+
+      - name: Verify via load balancer
+        env:
+          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
+          FALLBACK_HOST: ${{ secrets.DROPLET_HOST }}
+        run: |
+          set -euo pipefail
+          host="${LB_HOST:-$FALLBACK_HOST}"
+          if [[ -z "$host" ]]; then
+            echo "Set LOADBALANCER_IP (or DROPLET_HOST) in the development environment" >&2
+            exit 1
+          fi
+          for i in $(seq 1 30); do
+            if curl -fsS "http://${host}/health" >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "LB health check failed for ${host}"
+          exit 1

@@ -1,47 +1,55 @@
-# Deploy Development Droplet
+# Deploy Development (Autoscale Pool)
 
-Development environment on a DigitalOcean Droplet.
+Development runs on a DigitalOcean **Droplet Autoscale Pool** behind a **Load Balancer**.
 
-- **Infrastructure** (Droplet, firewall, tags): Terraform — see [`infra/terraform/README.md`](../infra/terraform/README.md)
+- **Infrastructure** (pool, LB, firewalls, managed Postgres): Terraform — see [`infra/terraform/README.md`](../infra/terraform/README.md)
 - **Application** (API / web / proxy containers): GitHub Actions below
+- **Bootstrap**: cloud-init on each new pool member installs Docker and starts Compose
 
-Components deploy independently.
+Components deploy independently to **every** Droplet with the pool tag.
 
 | Job | Deploys | Triggers on push when… |
 | --- | --- | --- |
-| `build-api` → `deploy-api` | API container | `apps/api/**`, `packages/**`, lockfile |
-| `build-web` → `deploy-web` | Web container | `apps/web/**`, lockfile |
-| `deploy-proxy` | Caddy + compose sync | `deploy/Caddyfile`, `deploy/docker-compose.yml` |
+| `build-api` → `deploy-api` | API on all pool hosts + migrate once | `apps/api/**`, `packages/**`, lockfile |
+| `build-web` → `deploy-web` | Web on all pool hosts | `apps/web/**`, lockfile |
+| `deploy-proxy` | Caddy + compose sync on all hosts | `deploy/Caddyfile`, `deploy/docker-compose.yml`, scripts |
 
 Manual: Actions → **Deploy Development** → choose `all` / `api` / `web` / `proxy`.
 
-## One-time Droplet setup
+## Topology
 
-1. Ubuntu 24.04 Droplet with SSH key (current: `sailing-plans` in `nyc1`).
-2. Bootstrap Docker:
-
-```bash
-# copy and run deploy/bootstrap.sh as root, or:
-curl -fsSL https://raw.githubusercontent.com/levisbakalinsky/sailing-plans/main/deploy/bootstrap.sh | bash
-```
-
-3. Ensure `/opt/sailing-plans` has `docker-compose.yml`, `Caddyfile`, and `.env`.
-4. Set `DATABASE_URL` in `.env` to the Terraform output `database_url_private` (managed Postgres). Do not run Postgres on the Droplet.
+- Pool tag: `sailing-plans-app-dev-pool` (override with env var `POOL_TAG`)
+- Min / max instances: **2 / 4** (CPU target 0.7)
+- Public entrypoint: Load Balancer IP (not individual Droplet IPs)
+- DB trust: managed Postgres firewall allows the pool **tag**
 
 ## GitHub configuration
 
-Environment: **`development`** (not production).
+Environment: **`development`**.
 
-| Secret | Value |
+| Secret / var | Value |
 | --- | --- |
-| `DROPLET_HOST` | Droplet public IP |
+| `DIGITALOCEAN_TOKEN` | List Droplets by tag during deploy |
 | `DROPLET_USER` | `root` (or deploy user in `docker` group) |
-| `DROPLET_SSH_KEY` | Private key for that user |
+| `DROPLET_SSH_KEY` | Private key matching Terraform `ssh_key_name` |
+| `LOADBALANCER_IP` | LB public IP (`terraform output -raw loadbalancer_ip`) |
+| `DROPLET_HOST` | Optional fallback if `LOADBALANCER_IP` unset |
+| `GHCR_PULL_TOKEN` | PAT/`read:packages` token for Droplet boot pulls (`TF_VAR_ghcr_pull_token`) |
+| `POOL_TAG` (optional variable) | Defaults to `sailing-plans-app-dev-pool` |
 
 Images: `ghcr.io/<owner>/sailing-plans-api:dev` and `-web:dev` (plus sha tags).
 
 ## URLs
 
-- Web: `http://<droplet-ip>/`
-- API health: `http://<droplet-ip>/health`
-- API prefix: `http://<droplet-ip>/api/health`
+- Web: `http://<loadbalancer-ip>/`
+- API health: `http://<loadbalancer-ip>/health`
+- API prefix: `http://<loadbalancer-ip>/api/health`
+
+## Local helpers
+
+```bash
+export DIGITALOCEAN_TOKEN=...
+export POOL_TAG=sailing-plans-app-dev-pool
+./deploy/scripts/pool-hosts.sh          # list public IPs
+./deploy/scripts/ssh-pool.sh -- 'uptime'  # run on every member
+```

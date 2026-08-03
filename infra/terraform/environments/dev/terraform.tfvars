@@ -23,3 +23,12 @@ db_app_user       = "sailing"
 # Optional: add your public IP to run prisma migrate from a laptop.
 # db_allowed_ip_addresses = ["1.2.3.4"]
 db_allowed_ip_addresses = []
+
+# Droplet Autoscale Pool + Load Balancer
+pool_min_instances          = 2
+pool_max_instances          = 4
+pool_target_cpu_utilization = 0.7
+pool_cooldown_minutes       = 10
+lb_size                     = "lb-small"
+# Set in CI / shell: export TF_VAR_ghcr_pull_token=...
+# ghcr_pull_token = ""

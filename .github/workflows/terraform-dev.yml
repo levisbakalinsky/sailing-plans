@@ -5,10 +5,14 @@ on:
     branches: [main]
     paths:
       - "infra/terraform/**"
+      - "deploy/docker-compose.yml"
+      - "deploy/Caddyfile"
       - ".github/workflows/terraform-dev.yml"
   pull_request:
     paths:
       - "infra/terraform/**"
+      - "deploy/docker-compose.yml"
+      - "deploy/Caddyfile"
       - ".github/workflows/terraform-dev.yml"
   workflow_dispatch:
     inputs:
@@ -16,8 +20,8 @@ on:
         description: "Apply the plan after validate (creates/updates DO resources)"
         type: boolean
         default: false
-      wire_droplet_database_url:
-        description: "After apply, write database_url_private into Droplet .env and restart api"
+      wire_pool_database_url:
+        description: "After apply, write database_url_private into every pool Droplet .env and restart api"
         type: boolean
         default: false
 
@@ -77,6 +81,7 @@ jobs:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+          TF_VAR_ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
         run: |
           terraform plan -input=false -out=tfplan
           terraform show -no-color tfplan > "$GITHUB_WORKSPACE/tfplan.txt"
@@ -115,10 +120,22 @@ jobs:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+          TF_VAR_ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
         run: terraform apply -input=false -auto-approve
 
+      - name: Print pool endpoints
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
+        run: |
+          echo "loadbalancer_ip=$(terraform output -raw loadbalancer_ip)"
+          echo "pool_tag=$(terraform output -raw pool_tag)"
+          echo "health_url=$(terraform output -raw health_url)"
+          echo "Set GitHub secret LOADBALANCER_IP to the load balancer IP above."
+
       - name: Export private DATABASE_URL
-        if: inputs.wire_droplet_database_url
+        if: inputs.wire_pool_database_url
         id: dburl
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -128,34 +145,40 @@ jobs:
           url="$(terraform output -raw database_url_private)"
           echo "::add-mask::$url"
           echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "pool_tag=$(terraform output -raw pool_tag)" >> "$GITHUB_OUTPUT"
 
-      - name: Wire Droplet DATABASE_URL and restart API
-        if: inputs.wire_droplet_database_url
-        uses: appleboy/ssh-action@v1.2.5
+      - name: Wire DATABASE_URL on all pool hosts
+        if: inputs.wire_pool_database_url
         env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
           DATABASE_URL: ${{ steps.dburl.outputs.url }}
-        with:
-          host: ${{ secrets.DROPLET_HOST }}
-          username: ${{ secrets.DROPLET_USER }}
-          key: ${{ secrets.DROPLET_SSH_KEY }}
-          envs: DATABASE_URL
-          script: |
-            set -euo pipefail
-            cd /opt/sailing-plans
-            touch .env
-            if grep -q '^DATABASE_URL=' .env; then
-              # Replace existing DATABASE_URL without printing the value.
-              awk -v url="$DATABASE_URL" '
-                BEGIN { done=0 }
-                /^DATABASE_URL=/ { print "DATABASE_URL=" url; done=1; next }
-                { print }
-                END { if (!done) print "DATABASE_URL=" url }
-              ' .env > .env.tmp && mv .env.tmp .env
-            else
-              printf 'DATABASE_URL=%s\n' "$DATABASE_URL" >> .env
+          POOL_TAG: ${{ steps.dburl.outputs.pool_tag }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y jq
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/ssh-pool.sh -- "$(cat <<EOF
+          set -euo pipefail
+          cd /opt/sailing-plans
+          touch .env
+          awk -v url="${DATABASE_URL}" '
+            BEGIN { done=0 }
+            /^DATABASE_URL=/ { print "DATABASE_URL=" url; done=1; next }
+            { print }
+            END { if (!done) print "DATABASE_URL=" url }
+          ' .env > .env.tmp && mv .env.tmp .env
+          chmod 600 .env
+          docker compose rm -sf db 2>/dev/null || true
+          docker compose up -d --no-deps --remove-orphans api || true
+          for i in \$(seq 1 30); do
+            if curl -fsS http://127.0.0.1/health; then
+              exit 0
             fi
-            # Remove local compose Postgres leftovers if present.
-            docker compose rm -sf db 2>/dev/null || true
-            # Restart API with existing image; do not pull :dev (sha tags are used by Deploy Development).
-            docker compose up -d --no-deps --remove-orphans api || docker start sailing-plans-api-1
-            curl -fsS http://127.0.0.1/health
+            sleep 2
+          done
+          exit 1
+          EOF
+          )"

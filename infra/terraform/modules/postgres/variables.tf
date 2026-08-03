@@ -55,6 +55,12 @@ variable "droplet_ids" {
   default     = []
 }
 
+variable "allowed_tags" {
+  description = "Droplet tags allowed to connect (for autoscale pools)."
+  type        = list(string)
+  default     = []
+}
+
 variable "allowed_ip_addresses" {
   description = "Extra IPv4/IPv6 addresses allowed to connect (ops/migrate)."
   type        = list(string)

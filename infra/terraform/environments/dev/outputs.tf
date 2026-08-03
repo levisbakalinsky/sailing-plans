@@ -1,30 +1,38 @@
-output "droplet_id" {
-  value = module.app_host.droplet_id
+output "autoscale_pool_id" {
+  value = module.app_pool.autoscale_pool_id
 }
 
-output "droplet_name" {
-  value = module.app_host.droplet_name
+output "loadbalancer_id" {
+  value = module.app_pool.loadbalancer_id
 }
 
-output "ipv4_address" {
-  value = module.app_host.ipv4_address
+output "loadbalancer_ip" {
+  value = module.app_pool.loadbalancer_ip
 }
 
-output "firewall_id" {
-  value = module.app_host.firewall_id
+output "pool_tag" {
+  value = module.app_pool.pool_tag
 }
 
-output "deploy_host" {
-  description = "Value for GitHub secret DROPLET_HOST."
-  value       = module.app_host.ipv4_address
+output "deploy_hosts_tag" {
+  description = "Tag used by Deploy Development to find SSH targets."
+  value       = module.app_pool.pool_tag
 }
 
 output "app_url" {
-  value = "http://${module.app_host.ipv4_address}/"
+  value = module.app_pool.app_url
 }
 
 output "health_url" {
-  value = "http://${module.app_host.ipv4_address}/health"
+  value = module.app_pool.health_url
+}
+
+output "pool_min_instances" {
+  value = module.app_pool.min_instances
+}
+
+output "pool_max_instances" {
+  value = module.app_pool.max_instances
 }
 
 output "db_cluster_id" {
@@ -52,7 +60,7 @@ output "db_app_user" {
 }
 
 output "database_url_private" {
-  description = "Set as DATABASE_URL on the Droplet (/opt/sailing-plans/.env)."
+  description = "Private DATABASE_URL (also injected into pool user-data)."
   value       = module.postgres.private_database_url
   sensitive   = true
 }

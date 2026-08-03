@@ -48,6 +48,14 @@ resource "digitalocean_database_firewall" "this" {
   }
 
   dynamic "rule" {
+    for_each = var.allowed_tags
+    content {
+      type  = "tag"
+      value = rule.value
+    }
+  }
+
+  dynamic "rule" {
     for_each = var.allowed_ip_addresses
     content {
       type  = "ip_addr"

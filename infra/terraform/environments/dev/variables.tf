@@ -29,9 +29,8 @@ variable "droplet_image" {
 }
 
 variable "vpc_uuid" {
-  type     = string
-  default  = null
-  nullable = true
+  description = "VPC UUID shared by the autoscale pool, LB, and managed Postgres."
+  type        = string
 }
 
 variable "ssh_key_name" {
@@ -86,4 +85,51 @@ variable "db_allowed_ip_addresses" {
   description = "Extra IPs trusted by the managed DB firewall (ops/migrate)."
   type        = list(string)
   default     = []
+}
+
+variable "pool_min_instances" {
+  type    = number
+  default = 2
+}
+
+variable "pool_max_instances" {
+  type    = number
+  default = 4
+}
+
+variable "pool_target_cpu_utilization" {
+  type    = number
+  default = 0.7
+}
+
+variable "pool_cooldown_minutes" {
+  type    = number
+  default = 10
+}
+
+variable "lb_size" {
+  type    = string
+  default = "lb-small"
+}
+
+variable "ghcr_username" {
+  type    = string
+  default = "levisbakalinsky"
+}
+
+variable "ghcr_pull_token" {
+  description = "GHCR token for Droplet image pulls on boot (set via TF_VAR_ghcr_pull_token / CI secret)."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "api_image" {
+  type    = string
+  default = "ghcr.io/levisbakalinsky/sailing-plans-api:dev"
+}
+
+variable "web_image" {
+  type    = string
+  default = "ghcr.io/levisbakalinsky/sailing-plans-web:dev"
 }

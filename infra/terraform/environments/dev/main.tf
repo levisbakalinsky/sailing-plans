@@ -2,26 +2,8 @@ data "digitalocean_ssh_key" "deploy" {
   name = var.ssh_key_name
 }
 
-module "app_host" {
-  source = "../../modules/app_host"
-
-  name               = var.droplet_name
-  environment        = var.environment
-  project            = var.project
-  region             = var.region
-  size               = var.droplet_size
-  image              = var.droplet_image
-  vpc_uuid           = var.vpc_uuid
-  ssh_key_ids        = [data.digitalocean_ssh_key.deploy.id]
-  monitoring         = true
-  ipv6               = false
-  allowed_ssh_cidrs  = var.allowed_ssh_cidrs
-  allowed_http_cidrs = ["0.0.0.0/0", "::/0"]
-
-  tags = [
-    "owner:${var.owner}",
-    "cost-center:${var.cost_center}",
-  ]
+locals {
+  pool_tag = "${var.project}-app-${var.environment}-pool"
 }
 
 module "postgres" {
@@ -37,11 +19,46 @@ module "postgres" {
   vpc_uuid             = var.vpc_uuid
   database_name        = var.db_name
   app_user             = var.db_app_user
-  droplet_ids          = [tostring(module.app_host.droplet_id)]
+  droplet_ids          = []
+  allowed_tags         = [local.pool_tag]
   allowed_ip_addresses = var.db_allowed_ip_addresses
 
   tags = [
     "owner:${var.owner}",
     "cost-center:${var.cost_center}",
   ]
+}
+
+module "app_pool" {
+  source = "../../modules/app_pool"
+
+  name                   = var.droplet_name
+  environment            = var.environment
+  project                = var.project
+  region                 = var.region
+  size                   = var.droplet_size
+  image                  = var.droplet_image
+  vpc_uuid               = var.vpc_uuid
+  ssh_key_fingerprints   = [data.digitalocean_ssh_key.deploy.fingerprint]
+  min_instances          = var.pool_min_instances
+  max_instances          = var.pool_max_instances
+  target_cpu_utilization = var.pool_target_cpu_utilization
+  cooldown_minutes       = var.pool_cooldown_minutes
+  pool_tag               = local.pool_tag
+  allowed_ssh_cidrs      = var.allowed_ssh_cidrs
+  database_url           = module.postgres.private_database_url
+  ghcr_username          = var.ghcr_username
+  ghcr_pull_token        = var.ghcr_pull_token
+  api_image              = var.api_image
+  web_image              = var.web_image
+  compose_yaml           = file("${path.module}/../../../../deploy/docker-compose.yml")
+  caddyfile              = file("${path.module}/../../../../deploy/Caddyfile")
+  lb_size                = var.lb_size
+
+  tags = [
+    "owner:${var.owner}",
+    "cost-center:${var.cost_center}",
+  ]
+
+  depends_on = [module.postgres]
 }
