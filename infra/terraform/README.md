@@ -71,9 +71,9 @@ Workflow: `.github/workflows/terraform-dev.yml`
 
 Public hostnames (proxied) point at the DO Load Balancer:
 
-- https://sailingplans.com / https://www.sailingplans.com
-- https://sailingplans.net / https://www.sailingplans.net → **301** → `.com`
-- https://sailingplans.org / https://www.sailingplans.org → **301** → `.com`
+- https://www.sailingplans.com (apex `sailingplans.com` 301 → www)
+- https://sailingplans.net / https://www.sailingplans.net → **301** → `www.sailingplans.com`
+- https://sailingplans.org / https://www.sailingplans.org → **301** → `www.sailingplans.com`
 
 Terraform manages:
 

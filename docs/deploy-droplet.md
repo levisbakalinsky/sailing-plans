@@ -43,11 +43,11 @@ Images: `ghcr.io/<owner>/sailing-plans-api:dev` and `-web:dev` (plus sha tags).
 
 Public (Cloudflare → LB):
 
-- https://sailingplans.com/
-- https://sailingplans.com/health
-- https://sailingplans.com/api/health
+- https://www.sailingplans.com/
+- https://www.sailingplans.com/health
+- https://www.sailingplans.com/api/health
 
-`.net` / `.org` (and www) 301-redirect to `https://sailingplans.com`.
+`.net` / `.org` (and www) 301-redirect to `https://www.sailingplans.com`.
 
 Direct LB (ops):
 

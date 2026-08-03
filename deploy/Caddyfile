@@ -3,12 +3,17 @@
 	auto_https off
 }
 
-# Alternate TLDs → canonical (defense in depth; Cloudflare Single Redirects also redirect).
+# Alternate TLDs → canonical www (defense in depth; Cloudflare Single Redirects also redirect).
 http://sailingplans.net, http://www.sailingplans.net, http://sailingplans.org, http://www.sailingplans.org {
-	redir https://sailingplans.com{uri} permanent
+	redir https://www.sailingplans.com{uri} permanent
 }
 
-# Public site + LB health checks (Host may be IP or sailingplans.com).
+# Apex .com → www (canonical host).
+http://sailingplans.com {
+	redir https://www.sailingplans.com{uri} permanent
+}
+
+# Public site + LB health checks (Host may be IP or www.sailingplans.com).
 :80 {
 	encode gzip
 
