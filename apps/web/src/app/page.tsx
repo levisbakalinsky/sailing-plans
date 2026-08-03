@@ -1,8 +1,8 @@
-import { LogoLockup, LogoMark } from '../components/Logo';
+import { LogoMark } from '../components/Logo';
 
 export default function HomePage() {
   return (
-    <main>
+    <main className="shell">
       <section className="hero" aria-label="Sailing Plans">
         <div className="hero-media" aria-hidden="true">
           <div className="hero-wash" />
@@ -32,30 +32,16 @@ export default function HomePage() {
             </a>
           </div>
         </div>
-      </section>
 
-      <section className="intent" id="waitlist">
-        <div className="intent-inner">
-          <h2>Almost underway</h2>
-          <p>
-            We&apos;re building a calmer way to plan and follow through. Nothing
-            to try yet—if you want first word when it opens, say hello.
-          </p>
-          <a
-            className="intent-link"
-            href="mailto:hello@sailingplans.com?subject=Waitlist"
-          >
+        <footer className="site-footer">
+          <span className="footer-meta">
+            © {new Date().getFullYear()} Avena Services, LLC
+          </span>
+          <a className="footer-mail" href="mailto:hello@sailingplans.com">
             hello@sailingplans.com
           </a>
-        </div>
+        </footer>
       </section>
-
-      <footer className="site-footer">
-        <LogoLockup />
-        <span className="footer-meta">
-          © {new Date().getFullYear()} Avena Services, LLC
-        </span>
-      </footer>
     </main>
   );
 }

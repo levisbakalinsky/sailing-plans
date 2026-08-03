@@ -1,14 +1,14 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
-import { Fraunces, Figtree } from 'next/font/google';
+import { EB_Garamond, Source_Sans_3 } from 'next/font/google';
 import './globals.css';
 
-const display = Fraunces({
+const display = EB_Garamond({
   subsets: ['latin'],
   variable: '--font-display',
 });
 
-const body = Figtree({
+const body = Source_Sans_3({
   subsets: ['latin'],
   variable: '--font-body',
 });
