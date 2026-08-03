@@ -37,6 +37,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
+        env:
+          # prisma.config.ts requires DATABASE_URL; generate does not connect.
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: pnpm --filter @sailing-plans/api db:generate
 
       - name: Typecheck
