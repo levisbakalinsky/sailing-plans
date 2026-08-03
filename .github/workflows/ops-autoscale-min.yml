@@ -1,0 +1,52 @@
+name: Ops Autoscale Min
+
+on:
+  workflow_dispatch:
+    inputs:
+      pool:
+        description: Which pool to scale
+        required: true
+        type: choice
+        options:
+          - blue
+          - green
+      min:
+        description: min_instances (DO requires >= 1)
+        required: true
+        type: string
+        default: "1"
+
+concurrency:
+  group: ops-autoscale-min
+  cancel-in-progress: false
+
+jobs:
+  set-min:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Set pool min_instances
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          POOL: ${{ github.event.inputs.pool }}
+          MIN: ${{ github.event.inputs.min }}
+          AUTOSCALE_POOL_ID_BLUE: ${{ vars.AUTOSCALE_POOL_ID_BLUE }}
+          AUTOSCALE_POOL_ID_GREEN: ${{ vars.AUTOSCALE_POOL_ID_GREEN }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          if [[ "$POOL" == "blue" ]]; then
+            POOL_ID="$AUTOSCALE_POOL_ID_BLUE"
+          else
+            POOL_ID="$AUTOSCALE_POOL_ID_GREEN"
+          fi
+          ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" "$MIN"

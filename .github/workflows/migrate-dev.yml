@@ -23,8 +23,6 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/${{ github.repository_owner }}/sailing-plans
-  # Prefer active color tag when set; fall back to shared pool tag.
-  POOL_TAG: ${{ vars.ACTIVE_COLOR_TAG || vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
 
 jobs:
   build-api:
@@ -83,7 +81,10 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           API_IMAGE: ${{ github.event.inputs.api_image || needs.build-api.outputs.image }}
-          POOL_TAG: ${{ env.POOL_TAG }}
+          LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
+          BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
+          GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
+          POOL_TAG_FALLBACK: ${{ vars.ACTIVE_COLOR_TAG || vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
         run: |
           set -euo pipefail
           if [[ -z "${API_IMAGE}" ]]; then
@@ -91,6 +92,18 @@ jobs:
             exit 1
           fi
           chmod +x deploy/scripts/*.sh
+          # Prefer LB active color so migrate always hits live traffic.
+          if [[ -n "${LOADBALANCER_ID}" ]]; then
+            active="$(./deploy/scripts/lb-get-tag.sh || true)"
+            if [[ "$active" == "$BLUE_TAG" || "$active" == "$GREEN_TAG" ]]; then
+              export POOL_TAG="$active"
+            else
+              export POOL_TAG="$POOL_TAG_FALLBACK"
+            fi
+          else
+            export POOL_TAG="$POOL_TAG_FALLBACK"
+          fi
+          echo "Migrating via pool tag: $POOL_TAG"
           ./deploy/scripts/ssh-pool.sh --first-only -- "$(cat <<EOF
           set -euo pipefail
           cd /opt/sailing-plans

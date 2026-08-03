@@ -514,11 +514,15 @@ jobs:
           exit 1
 
       - name: Record active color for migrations
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
-          gh variable set ACTIVE_COLOR_TAG --env development --body "$INACTIVE_TAG"
+          # Best-effort: GITHUB_TOKEN often cannot write environment variables.
+          # Migrate Development resolves the active tag from the LB when needed.
+          gh variable set ACTIVE_COLOR_TAG --env development --body "$INACTIVE_TAG" || \
+            echo "Could not update ACTIVE_COLOR_TAG (non-fatal); migrate will read LB tag."
 
   finalize:
     needs: [resolve-colors, cutover]
