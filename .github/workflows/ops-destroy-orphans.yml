@@ -1,0 +1,72 @@
+name: Ops Destroy Orphans
+
+# Destroy Droplets that still carry the inactive color tag but are not in the
+# active autoscale pool (leftovers after pool delete).
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: List orphans only (do not destroy)
+        type: boolean
+        default: false
+
+jobs:
+  destroy:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Destroy inactive-color orphan droplets
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
+          BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
+          GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          lb="$(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+            "https://api.digitalocean.com/v2/load_balancers/${LOADBALANCER_ID}")"
+          active="$(jq -r '.load_balancer.tag // .load_balancer.droplet_tag // empty' <<<"$lb")"
+          if [[ "$active" == "$BLUE_TAG" ]]; then
+            inactive="$GREEN_TAG"
+          elif [[ "$active" == "$GREEN_TAG" ]]; then
+            inactive="$BLUE_TAG"
+          else
+            echo "Unexpected active LB tag: ${active:-empty}" >&2
+            exit 1
+          fi
+          echo "Active=$active Inactive=$inactive"
+
+          # Orphans: tagged with inactive color, not tagged with active color.
+          mapfile -t ORPHANS < <(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+            "https://api.digitalocean.com/v2/droplets?tag_name=${inactive}&per_page=200" \
+            | jq -r --arg active "$active" '
+              .droplets[]?
+              | select((.tags // []) | index($active) | not)
+              | "\(.id)\t\(.name)"
+            ')
+
+          if [[ "${#ORPHANS[@]}" -eq 0 ]]; then
+            echo "No orphan droplets found."
+            exit 0
+          fi
+
+          for row in "${ORPHANS[@]}"; do
+            id="${row%%$'\t'*}"
+            name="${row#*$'\t'}"
+            echo "Orphan: $id $name"
+            if [[ "$DRY_RUN" == "true" ]]; then
+              continue
+            fi
+            code="$(curl -sS -o /tmp/del.json -w '%{http_code}' -X DELETE \
+              -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+              "https://api.digitalocean.com/v2/droplets/${id}")"
+            echo "  delete http=$code"
+            if [[ "$code" != "204" && "$code" != "202" && "$code" != "404" ]]; then
+              cat /tmp/del.json >&2 || true
+              exit 1
+            fi
+          done

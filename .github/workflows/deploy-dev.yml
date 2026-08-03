@@ -570,9 +570,12 @@ jobs:
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           POOL_ID: ${{ needs.resolve-colors.outputs.active_pool_id }}
+          OLD_TAG: ${{ needs.resolve-colors.outputs.active_tag }}
+          KEEP_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
           # DO cannot scale a pool to 0; delete the old color so we return to baseline (2).
           # Next deploy recreates it via autoscale-ensure.sh.
-          ./deploy/scripts/autoscale-delete.sh "$POOL_ID"
+          # KEEP_TAG is the newly active color (inactive before cutover).
+          ./deploy/scripts/autoscale-delete.sh "$POOL_ID" "$OLD_TAG" "$KEEP_TAG"

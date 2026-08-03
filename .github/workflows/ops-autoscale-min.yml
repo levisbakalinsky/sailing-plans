@@ -53,6 +53,7 @@ jobs:
           ACTIVE_COLOR_TAG: ${{ vars.ACTIVE_COLOR_TAG }}
           BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
           GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
+          LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
@@ -64,11 +65,17 @@ jobs:
             TAG="$GREEN_TAG"
           fi
           if [[ "$ACTION" == "delete" ]]; then
-            if [[ "$ACTIVE_COLOR_TAG" == "$TAG" ]]; then
+            keep="$ACTIVE_COLOR_TAG"
+            if [[ -n "${LOADBALANCER_ID}" ]]; then
+              keep="$(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
+                "https://api.digitalocean.com/v2/load_balancers/${LOADBALANCER_ID}" \
+                | jq -r '.load_balancer.tag // .load_balancer.droplet_tag // empty')"
+            fi
+            if [[ "$keep" == "$TAG" ]]; then
               echo "Refusing to delete the active color ($TAG)" >&2
               exit 1
             fi
-            ./deploy/scripts/autoscale-delete.sh "$POOL_ID"
+            ./deploy/scripts/autoscale-delete.sh "$POOL_ID" "$TAG" "$keep"
           else
             ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" "$MIN"
           fi
