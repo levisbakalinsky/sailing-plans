@@ -42,6 +42,11 @@ jobs:
           DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
         run: pnpm --filter @sailing-plans/api db:generate
 
+      - name: Prisma validate
+        env:
+          DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/ci?schema=public
+        run: pnpm --filter @sailing-plans/api exec prisma validate
+
       - name: Typecheck
         run: pnpm typecheck
 

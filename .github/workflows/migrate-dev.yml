@@ -1,6 +1,6 @@
 name: Migrate DB (Development)
 
-# Applies Prisma migrations. Run this before Ship when schema changes.
+# Applies Prisma migrations. Runs before Ship when schema changes.
 # Developers: docs/shipping.md — leave api_image empty unless you know you need it.
 on:
   workflow_dispatch:
@@ -17,7 +17,7 @@ on:
       - ".github/workflows/migrate-dev.yml"
 
 concurrency:
-  # Serialize with deploy/release so migrate always wins the DB before cutover.
+  # Serialize with ship/ops so migrate always wins the DB before cutover.
   group: deploy-dev-pool
   cancel-in-progress: false
 
@@ -93,7 +93,6 @@ jobs:
             exit 1
           fi
           chmod +x deploy/scripts/*.sh
-          # Prefer LB active color so migrate always hits live traffic.
           if [[ -n "${LOADBALANCER_ID}" ]]; then
             active="$(./deploy/scripts/lb-get-tag.sh || true)"
             if [[ "$active" == "$BLUE_TAG" || "$active" == "$GREEN_TAG" ]]; then
@@ -110,7 +109,6 @@ jobs:
           cd /opt/sailing-plans
           echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
           docker pull "${API_IMAGE}"
-          # Use the host's private DATABASE_URL (VPC) from .env; do not start the app.
           set -a
           # shellcheck disable=SC1091
           source .env
@@ -126,3 +124,44 @@ jobs:
             npx prisma migrate deploy
           EOF
           )"
+
+  trigger-ship:
+    needs: [migrate]
+    if: github.event_name == 'push' && needs.migrate.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Trigger Ship when this commit also has app changes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          before="${{ github.event.before }}"
+          if [[ -z "$before" || "$before" =~ ^0+$ ]]; then
+            mapfile -t files < <(git diff-tree --no-commit-id --name-only -r "$GITHUB_SHA")
+          else
+            mapfile -t files < <(git diff --name-only "$before" "$GITHUB_SHA")
+          fi
+          app=false
+          for f in "${files[@]}"; do
+            case "$f" in
+              apps/api/prisma/migrations/*) ;;
+              apps/api/*|apps/web/*|packages/*|deploy/docker-compose.yml|deploy/Caddyfile|pnpm-lock.yaml)
+                app=true
+                ;;
+            esac
+          done
+          if [[ "$app" != "true" ]]; then
+            echo "Migrate-only commit — not triggering Ship"
+            exit 0
+          fi
+          echo "App changes present — triggering Ship (Development)"
+          gh workflow run "Ship (Development)" --ref "$GITHUB_REF_NAME" \
+            -f component=all \
+            -f release_message="auto after migrate ${GITHUB_SHA::12}"

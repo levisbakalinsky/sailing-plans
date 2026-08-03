@@ -21,6 +21,10 @@ on:
         description: "Apply the plan (creates/updates DO resources). Leave false to plan only."
         type: boolean
         default: false
+      ensure_green_pool:
+        description: "Recreate green pool if missing (leave false; Ship creates idle color when needed)"
+        type: boolean
+        default: false
       bootstrap_lb_blue:
         description: "⚠ First-time setup only — force LB tag to blue (never after another color is live)"
         type: boolean
@@ -31,7 +35,8 @@ on:
         default: false
 
 concurrency:
-  group: terraform-dev
+  # Plan can run on its own; apply joins the deploy family so it cannot race Ship.
+  group: ${{ github.event_name == 'workflow_dispatch' && inputs.apply && 'deploy-dev-pool' || 'terraform-dev' }}
   cancel-in-progress: false
 
 defaults:
@@ -81,6 +86,46 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         run: terraform init -backend-config=backend.hcl -input=false
 
+      - name: Resolve manage_green_pool + state address
+        id: green
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
+          GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
+          ENSURE_GREEN: ${{ github.event_name == 'workflow_dispatch' && inputs.ensure_green_pool || false }}
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y jq
+          chmod +x deploy/scripts/*.sh
+          # Introduce count index once (module.app_pool_green → module.app_pool_green[0]).
+          (
+            cd infra/terraform/environments/dev
+            if terraform state list 2>/dev/null | grep -qx 'module.app_pool_green'; then
+              terraform state mv 'module.app_pool_green' 'module.app_pool_green[0]'
+            fi
+          )
+          # Only manage green when it exists, is live, or explicitly requested.
+          # Avoids recreate-after-teardown; Ship creates the idle color when needed.
+          manage=false
+          if [[ "${ENSURE_GREEN}" == "true" ]]; then
+            manage=true
+          fi
+          green_id="$(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+            "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
+            | jq -r '.autoscale_pools[]? | select(.name=="sailing-plans-app-dev-green") | .id' | head -n1 || true)"
+          if [[ -n "$green_id" ]]; then
+            manage=true
+          fi
+          if [[ -n "${LOADBALANCER_ID:-}" ]]; then
+            active="$(./deploy/scripts/lb-get-tag.sh || true)"
+            if [[ "$active" == "$GREEN_TAG" ]]; then
+              manage=true
+            fi
+          fi
+          echo "manage_green_pool=$manage (ensure=$ENSURE_GREEN exists=${green_id:-none})"
+          echo "manage=$manage" >> "$GITHUB_OUTPUT"
+
       - name: terraform plan
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -88,6 +133,7 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           TF_VAR_ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
+          TF_VAR_manage_green_pool: ${{ steps.green.outputs.manage }}
         run: |
           terraform plan -input=false -out=tfplan
           terraform show -no-color tfplan > "$GITHUB_WORKSPACE/tfplan.txt"
@@ -107,6 +153,10 @@ jobs:
     environment: development
     permissions:
       contents: read
+    # Belt-and-suspenders with workflow concurrency when apply=true.
+    concurrency:
+      group: deploy-dev-pool
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v7
 
@@ -149,9 +199,9 @@ jobs:
           echo "blue_tag=$(terraform output -raw blue_tag)"
           echo "green_tag=$(terraform output -raw green_tag)"
           echo "autoscale_pool_id_blue=$(terraform output -raw autoscale_pool_id_blue)"
-          echo "autoscale_pool_id_green=$(terraform output -raw autoscale_pool_id_green)"
+          echo "autoscale_pool_id_green=$(terraform output -raw autoscale_pool_id_green || echo null)"
           echo "health_url=$(terraform output -raw health_url)"
-          echo "NOTE: CI deletes idle pools; a later apply may recreate them. Prefer Ops/Release for pool lifecycle."
+          echo "NOTE: Missing green pool is left missing unless ensure_green_pool=true or green is live. Ship creates idle color."
 
       - name: Bootstrap LB → blue (opt-in only)
         if: inputs.bootstrap_lb_blue
@@ -202,11 +252,16 @@ jobs:
           set -euo pipefail
           sudo apt-get update && sudo apt-get install -y jq
           chmod +x deploy/scripts/*.sh
+          # Base64 avoids shell metacharacters in DB passwords when building the remote script.
+          DB_B64="$(printf '%s' "$DATABASE_URL" | base64 -w0)"
+          REDIS_B64="$(printf '%s' "$REDIS_URL" | base64 -w0)"
           ./deploy/scripts/ssh-pool.sh -- "$(cat <<EOF
           set -euo pipefail
           cd /opt/sailing-plans
           touch .env
-          awk -v url="${DATABASE_URL}" -v redis="${REDIS_URL}" '
+          db="\$(printf '%s' '${DB_B64}' | base64 -d)"
+          redis="\$(printf '%s' '${REDIS_B64}' | base64 -d)"
+          awk -v url="\$db" -v redis="\$redis" '
             BEGIN { db=0; rd=0 }
             /^DATABASE_URL=/ { print "DATABASE_URL=" url; db=1; next }
             /^REDIS_URL=/ { print "REDIS_URL=" redis; rd=1; next }
@@ -218,13 +273,14 @@ jobs:
           ' .env > .env.tmp && mv .env.tmp .env
           chmod 600 .env
           docker compose rm -sf db 2>/dev/null || true
-          docker compose up -d --no-deps --force-recreate --remove-orphans api || true
+          docker compose up -d --no-deps --force-recreate --remove-orphans api
           for i in \$(seq 1 30); do
-            if curl -fsS http://127.0.0.1/health; then
+            if curl -fsS http://127.0.0.1/health >/dev/null; then
               exit 0
             fi
             sleep 2
           done
+          docker compose logs --tail=80 api
           exit 1
           EOF
           )"

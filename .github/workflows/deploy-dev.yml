@@ -1,8 +1,8 @@
 name: Ship (Development)
 
 # Ships app images to development (blue/green under the hood).
-# Developers: leave advanced inputs false. See docs/shipping.md
-# Schema changes: run "Migrate DB (Development)" first.
+# Fix-forward only — no runtime rollback. See docs/shipping.md
+# Schema changes: Migrate runs first; it re-triggers Ship when app code is also present.
 on:
   push:
     branches: [main]
@@ -10,10 +10,8 @@ on:
       - "apps/api/**"
       - "apps/web/**"
       - "packages/**"
-      # Only app runtime config — not deploy/scripts (ops helpers must not recreate idle pools).
       - "deploy/docker-compose.yml"
       - "deploy/Caddyfile"
-      - "deploy/bootstrap.sh"
       - "pnpm-lock.yaml"
       - ".github/workflows/deploy-dev.yml"
   workflow_dispatch:
@@ -33,14 +31,6 @@ on:
         required: false
         type: string
         default: ""
-      finalize:
-        description: "⚠ Advanced — delete old servers after ship (leave false; use Ops teardown-idle later if needed)"
-        type: boolean
-        default: false
-      skip_cutover:
-        description: "⚠ Advanced — stage only, do not send traffic yet (leave false)"
-        type: boolean
-        default: false
 
 concurrency:
   group: deploy-dev-pool
@@ -65,10 +55,14 @@ jobs:
       api: ${{ steps.select.outputs.api }}
       web: ${{ steps.select.outputs.web }}
       proxy: ${{ steps.select.outputs.proxy }}
+      defer_for_migrate: ${{ steps.select.outputs.defer_for_migrate }}
+      proceed: ${{ steps.select.outputs.proceed }}
     steps:
       - name: Checkout
         if: github.event_name == 'push'
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Detect path changes
         if: github.event_name == 'push'
@@ -78,6 +72,7 @@ jobs:
           filters: |
             api:
               - 'apps/api/**'
+              - '!apps/api/prisma/migrations/**'
               - 'packages/**'
               - 'pnpm-lock.yaml'
             web:
@@ -86,12 +81,13 @@ jobs:
             proxy:
               - 'deploy/Caddyfile'
               - 'deploy/docker-compose.yml'
-              - 'deploy/bootstrap.sh'
-              - 'deploy/scripts/**'
+            migrations:
+              - 'apps/api/prisma/migrations/**'
 
       - name: Resolve components
         id: select
         run: |
+          defer=false
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
             component="${{ github.event.inputs.component }}"
             api=false; web=false; proxy=false
@@ -105,15 +101,68 @@ jobs:
             api=${{ steps.filter.outputs.api || 'false' }}
             web=${{ steps.filter.outputs.web || 'false' }}
             proxy=${{ steps.filter.outputs.proxy || 'false' }}
+            migrations=${{ steps.filter.outputs.migrations || 'false' }}
+            # Avoid migrate↔ship race: Migrate owns the commit, then re-triggers Ship.
+            if [[ "$migrations" == "true" ]]; then
+              echo "This push includes DB migrations — deferring Ship to Migrate DB workflow."
+              defer=true
+              api=false; web=false; proxy=false
+            fi
+          fi
+          proceed=false
+          if [[ "$defer" != "true" && ( "$api" == "true" || "$web" == "true" || "$proxy" == "true" ) ]]; then
+            proceed=true
           fi
           echo "api=$api" >> "$GITHUB_OUTPUT"
           echo "web=$web" >> "$GITHUB_OUTPUT"
           echo "proxy=$proxy" >> "$GITHUB_OUTPUT"
-          echo "Deploy selection → api=$api web=$web proxy=$proxy"
+          echo "defer_for_migrate=$defer" >> "$GITHUB_OUTPUT"
+          echo "proceed=$proceed" >> "$GITHUB_OUTPUT"
+          echo "Ship selection → api=$api web=$web proxy=$proxy defer=$defer proceed=$proceed"
+
+  await-ci:
+    needs: changes
+    if: needs.changes.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Wait for CI on this commit
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.sha }}"
+          echo "Waiting for CI success on $sha"
+          for i in $(seq 1 120); do
+            json="$(gh run list --workflow=CI --commit "$sha" --limit 5 \
+              --json databaseId,conclusion,status,event 2>/dev/null || echo '[]')"
+            # Prefer a completed success; ignore cancelled supersedes while another runs.
+            success="$(jq -r '[.[] | select(.conclusion=="success")] | length' <<<"$json")"
+            if [[ "$success" -gt 0 ]]; then
+              echo "CI succeeded"
+              exit 0
+            fi
+            failed="$(jq -r '[.[] | select(.conclusion=="failure")] | length' <<<"$json")"
+            running="$(jq -r '[.[] | select(.status=="in_progress" or .status=="queued" or .status=="pending")] | length' <<<"$json")"
+            if [[ "$failed" -gt 0 && "$running" -eq 0 ]]; then
+              echo "CI failed for $sha" >&2
+              jq -r '.[] | select(.conclusion=="failure") | "\(.databaseId) \(.conclusion)"' <<<"$json" >&2 || true
+              exit 1
+            fi
+            if [[ "$running" -eq 0 && "$success" -eq 0 && "$failed" -eq 0 && "$i" -gt 6 ]]; then
+              echo "No CI run found for $sha after waiting — failing closed" >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          echo "Timed out waiting for CI" >&2
+          exit 1
 
   resolve-colors:
-    needs: changes
-    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.proxy == 'true'
+    needs: [changes, await-ci]
+    if: needs.changes.outputs.proceed == 'true' && needs.await-ci.result == 'success'
     runs-on: ubuntu-latest
     environment: development
     outputs:
@@ -162,55 +211,13 @@ jobs:
           echo "baseline_min=$baseline_min" >> "$GITHUB_OUTPUT"
           echo "Active=$active_tag Inactive=$inactive_tag"
 
-  scale-inactive:
-    needs: [changes, resolve-colors]
-    runs-on: ubuntu-latest
-    environment: development
-    outputs:
-      inactive_pool_id: ${{ steps.ensure.outputs.inactive_pool_id }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          sparse-checkout: |
-            deploy/scripts
-          sparse-checkout-cone-mode: true
-
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-
-      - name: Ensure inactive pool + scale to baseline
-        id: ensure
-        env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-          POOL_ID: ${{ needs.resolve-colors.outputs.inactive_pool_id }}
-          POOL_NAME: ${{ needs.resolve-colors.outputs.inactive_pool_name }}
-          COLOR_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
-          SHARED_TAG: ${{ env.POOL_TAG }}
-          CLONE_FROM: ${{ needs.resolve-colors.outputs.active_pool_id }}
-          MIN: ${{ needs.resolve-colors.outputs.baseline_min }}
-          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
-          GREEN_TAG: ${{ env.GREEN_TAG }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -euo pipefail
-          chmod +x deploy/scripts/*.sh
-          # Recreate inactive pool if a prior finalize deleted it (DO cannot keep min=0).
-          out="$(./deploy/scripts/autoscale-ensure.sh \
-            "$POOL_ID" "$POOL_NAME" "$COLOR_TAG" "$SHARED_TAG" "$CLONE_FROM" "$MIN")"
-          echo "$out"
-          new_id="$(sed -n 's/^pool_id=//p' <<<"$out" | tail -n1)"
-          echo "inactive_pool_id=$new_id" >> "$GITHUB_OUTPUT"
-          # Best-effort refresh of the color pool id variable for next runs.
-          if [[ "$COLOR_TAG" == "$GREEN_TAG" ]]; then
-            gh variable set AUTOSCALE_POOL_ID_GREEN --env development --body "$new_id" || true
-          else
-            gh variable set AUTOSCALE_POOL_ID_BLUE --env development --body "$new_id" || true
-          fi
-          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900
-
   build-api:
-    needs: changes
-    if: needs.changes.outputs.api == 'true'
+    needs: [changes, await-ci]
+    if: |
+      always()
+      && needs.changes.outputs.proceed == 'true'
+      && needs.await-ci.result == 'success'
+      && needs.changes.outputs.api == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -242,8 +249,12 @@ jobs:
           cache-to: type=gha,mode=max,scope=api-dev
 
   build-web:
-    needs: changes
-    if: needs.changes.outputs.web == 'true'
+    needs: [changes, await-ci]
+    if: |
+      always()
+      && needs.changes.outputs.proceed == 'true'
+      && needs.await-ci.result == 'success'
+      && needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -275,6 +286,49 @@ jobs:
             ${{ steps.meta.outputs.latest }}
           cache-from: type=gha,scope=web-dev
           cache-to: type=gha,mode=max,scope=web-dev
+
+  scale-inactive:
+    needs: [changes, resolve-colors, build-api, build-web]
+    if: |
+      always()
+      && needs.changes.outputs.proceed == 'true'
+      && needs.resolve-colors.result == 'success'
+      && (needs.changes.outputs.api != 'true' || needs.build-api.result == 'success')
+      && (needs.changes.outputs.web != 'true' || needs.build-web.result == 'success')
+    runs-on: ubuntu-latest
+    environment: development
+    outputs:
+      inactive_pool_id: ${{ steps.ensure.outputs.inactive_pool_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Ensure inactive pool + scale to baseline
+        id: ensure
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          POOL_ID: ${{ needs.resolve-colors.outputs.inactive_pool_id }}
+          POOL_NAME: ${{ needs.resolve-colors.outputs.inactive_pool_name }}
+          COLOR_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+          SHARED_TAG: ${{ env.POOL_TAG }}
+          CLONE_FROM: ${{ needs.resolve-colors.outputs.active_pool_id }}
+          MIN: ${{ needs.resolve-colors.outputs.baseline_min }}
+          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          out="$(./deploy/scripts/autoscale-ensure.sh \
+            "$POOL_ID" "$POOL_NAME" "$COLOR_TAG" "$SHARED_TAG" "$CLONE_FROM" "$MIN")"
+          echo "$out"
+          new_id="$(sed -n 's/^pool_id=//p' <<<"$out" | tail -n1)"
+          echo "inactive_pool_id=$new_id" >> "$GITHUB_OUTPUT"
+          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900
 
   deploy-api:
     needs: [changes, resolve-colors, scale-inactive, build-api]
@@ -333,13 +387,13 @@ jobs:
           )"
 
   deploy-web:
-    needs: [changes, resolve-colors, scale-inactive, build-web, deploy-api]
+    needs: [changes, resolve-colors, scale-inactive, build-web, deploy-api, build-api]
     if: |
       always()
       && needs.changes.outputs.web == 'true'
       && needs.build-web.result == 'success'
       && needs.scale-inactive.result == 'success'
-      && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
+      && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -396,8 +450,8 @@ jobs:
       always()
       && needs.changes.outputs.proxy == 'true'
       && needs.scale-inactive.result == 'success'
-      && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
-      && (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped')
+      && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
+      && (needs.changes.outputs.web != 'true' || needs.deploy-web.result == 'success')
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -490,7 +544,6 @@ jobs:
     if: |
       always()
       && needs.healthcheck-inactive.result == 'success'
-      && (github.event_name != 'workflow_dispatch' || github.event.inputs.skip_cutover != 'true')
     runs-on: ubuntu-latest
     environment: development
     steps:
@@ -508,6 +561,7 @@ jobs:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           LOADBALANCER_ID: ${{ env.LOADBALANCER_ID }}
           INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+          PREV_TAG: ${{ needs.resolve-colors.outputs.active_tag }}
           LB_HOST: ${{ secrets.LOADBALANCER_IP }}
         run: |
           set -euo pipefail
@@ -520,25 +574,23 @@ jobs:
             fi
             sleep 5
           done
-          echo "LB unhealthy after cutover — flip back manually if needed" >&2
+          echo "LB unhealthy after cutover — flipping back to $PREV_TAG" >&2
+          ./deploy/scripts/lb-set-tag.sh "$PREV_TAG" || true
+          for i in $(seq 1 24); do
+            if curl -fsS "http://${LB_HOST}/health" >/dev/null; then
+              echo "LB restored on $PREV_TAG" >&2
+              break
+            fi
+            sleep 5
+          done
           exit 1
-
-      - name: Record active color for migrations
-        continue-on-error: true
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
-        run: |
-          # Best-effort: GITHUB_TOKEN often cannot write environment variables.
-          # Migrate DB resolves the active tag from the LB when needed.
-          gh variable set ACTIVE_COLOR_TAG --env development --body "$INACTIVE_TAG" || \
-            echo "Could not update ACTIVE_COLOR_TAG (non-fatal); migrate will read LB tag."
 
   record-release:
     needs: [resolve-colors, healthcheck-inactive, build-api, build-web, cutover]
     if: |
       always()
       && needs.healthcheck-inactive.result == 'success'
+      && needs.cutover.result == 'success'
     runs-on: ubuntu-latest
     environment: development
     steps:
@@ -566,7 +618,6 @@ jobs:
           API_IMAGE_BUILT: ${{ needs.build-api.outputs.image }}
           WEB_IMAGE_BUILT: ${{ needs.build-web.outputs.image }}
           GIT_SHA: ${{ github.sha }}
-          CUTOVER_RESULT: ${{ needs.cutover.result }}
           RELEASE_MESSAGE: ${{ github.event.inputs.release_message || '' }}
         run: |
           set -euo pipefail
@@ -590,12 +641,7 @@ jobs:
           fi
 
           short="${GIT_SHA::12}"
-          # UTC id: sortable + unique per sha deploy.
           rid="$(date -u +%Y%m%dT%H%M%SZ)-${short}"
-          live=true
-          if [[ "$CUTOVER_RESULT" != "success" ]]; then
-            live=false
-          fi
 
           release="$(jq -nc \
             --arg id "$rid" \
@@ -604,7 +650,6 @@ jobs:
             --arg api "$api_image" \
             --arg web "$web_image" \
             --arg msg "$RELEASE_MESSAGE" \
-            --argjson live "$live" \
             '{
               id: $id,
               git_sha: $sha,
@@ -612,49 +657,39 @@ jobs:
               api_image: $api,
               web_image: $web,
               message: $msg,
-              live: $live,
+              live: true,
               created_at: (now|todate),
               source: "deploy"
             }')"
           echo "$release" | jq .
           ./deploy/scripts/release-ledger.sh append "$release"
-          if [[ "$live" == "true" ]]; then
-            ./deploy/scripts/release-ledger.sh set-current "$rid"
-          fi
+          ./deploy/scripts/release-ledger.sh set-current "$rid"
 
           host_state="$(jq -nc \
             --argjson rel "$release" \
-            --arg active "$([[ "$live" == "true" ]] && echo "$INACTIVE_TAG" || echo "$ACTIVE_TAG")" \
+            --arg active "$INACTIVE_TAG" \
             --arg prev "$ACTIVE_TAG" \
-            --argjson live "$live" \
             '{
               active_color: $active,
               previous_color: $prev,
-              active: (if $live then $rel else null end),
-              pending: (if $live then null else $rel end),
+              active: $rel,
+              pending: null,
               updated_at: (now|todate),
-              last_action: (if $live then "deploy-cutover" else "deploy-staged" end)
+              last_action: "deploy-cutover"
             }')"
           tmp="$(mktemp)"
           echo "$host_state" | jq . | tee "$tmp"
-          if [[ "$live" == "true" ]]; then
-            export POOL_TAG="$INACTIVE_TAG"
-          else
-            export POOL_TAG="$ACTIVE_TAG"
-          fi
-          ./deploy/scripts/release-state.sh put "$tmp"
           export POOL_TAG="$INACTIVE_TAG"
-          ./deploy/scripts/release-state.sh put "$tmp" || true
+          ./deploy/scripts/release-state.sh put "$tmp"
           rm -f "$tmp"
-          echo "Registered release $rid (live=$live)"
+          echo "Registered release $rid"
 
-  finalize:
+  teardown-previous:
     needs: [resolve-colors, cutover, record-release]
     if: |
       always()
       && needs.cutover.result == 'success'
-      && github.event_name == 'workflow_dispatch'
-      && github.event.inputs.finalize == 'true'
+      && needs.record-release.result == 'success'
     runs-on: ubuntu-latest
     environment: development
     steps:
@@ -676,5 +711,8 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          # Optional: drops instant rollback. Prefer Ops (Development) → teardown-idle.
+          if [[ -z "${POOL_ID:-}" ]]; then
+            echo "No previous pool id — nothing to tear down"
+            exit 0
+          fi
           ./deploy/scripts/autoscale-delete.sh "$POOL_ID" "$OLD_TAG" "$KEEP_TAG"

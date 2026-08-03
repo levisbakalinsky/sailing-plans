@@ -3,7 +3,7 @@ output "autoscale_pool_id_blue" {
 }
 
 output "autoscale_pool_id_green" {
-  value = module.app_pool_green.autoscale_pool_id
+  value = try(module.app_pool_green[0].autoscale_pool_id, null)
 }
 
 output "loadbalancer_id" {
@@ -23,7 +23,7 @@ output "blue_tag" {
 }
 
 output "green_tag" {
-  value = module.app_pool_green.color_tag
+  value = digitalocean_tag.green.name
 }
 
 output "deploy_hosts_tag" {

@@ -22,12 +22,14 @@ infra/terraform/
 | Concern | Tool |
 | --- | --- |
 | LB, firewalls, tags, Postgres, Valkey, pool *definitions* | Terraform |
-| Day-to-day idle pool create/delete + LB cutovers | GitHub Actions (Ship / Releases / Ops) |
+| Day-to-day idle pool create/delete + LB cutovers | GitHub Actions (Ship / Ops) |
 | Cloudflare DNS (apex/www → LB) + SSL mode | Terraform (`cloudflare_dns`) |
 | `.net`/`.org` → `.com` 301 redirects | Cloudflare Single Redirects (dashboard) + Caddyfile backup |
 | DB migrations | `Migrate DB (Development)` (before ship when schema changes) |
-| App ship + release ledger | `Ship (Development)` / `Rollback / Releases (Development)` |
+| App ship + release history | `Ship (Development)` / `Release history (Development)` |
 | New pool member bootstrap | cloud-init (`app_pool` user-data) |
+
+Green pool: apply does **not** recreate a missing green pool unless it is live, already present, or `ensure_green_pool=true`. Ship creates the idle color when shipping.
 
 Developers: [`docs/shipping.md`](../../docs/shipping.md). Ops detail: [`docs/deploy-ops.md`](../../docs/deploy-ops.md).
 
@@ -92,7 +94,7 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 | Setting | Default |
 | --- | --- |
 | Active color min / max | 2 / 4 |
-| Idle color | Kept by default after cutover; tear down via **Ops (Development)** |
+| Idle color | Deleted by Ship after successful cutover (fix-forward; no rollback pool) |
 | Size | `s-2vcpu-4gb` |
 | CPU target | 0.7 |
 | Cooldown | 10 minutes |
@@ -100,7 +102,7 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 | Shared tag | `sailing-plans-app-dev-pool` (DB/Valkey/firewall) |
 | Color tags | `…-pool-blue`, `…-pool-green` |
 
-**Ownership split:** Terraform defines both color pools + LB. CI scales/recreates/deletes the idle color around releases. A `terraform apply` after CI deleted a pool **will recreate it** — expected; use Ops for routine teardown.
+**Ownership split:** Terraform defines blue (+ optional green) + LB. Ship creates/deletes the idle color around cutovers. Apply does not recreate a missing green pool unless it is live, already present, or `ensure_green_pool=true`.
 
 Do **not** use Terraform’s optional `bootstrap_lb_blue` after green (or any non-blue color) is live.
 

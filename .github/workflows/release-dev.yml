@@ -1,29 +1,19 @@
-name: Rollback / Releases (Development)
+name: Release history (Development)
 
-# List release history or activate a past build (rollback / jump).
-# Developers: list → copy id → activate. See docs/shipping.md
+# Read-only release ledger (what shipped). No activate/rollback in development —
+# fix forward: revert or ship again. See docs/shipping.md
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: "list = history · activate = rollback/jump · status = diagnose · seed-live = one-time bootstrap"
+        description: "list = history · status = diagnose · seed-live = one-time bootstrap"
         required: true
         type: choice
         default: list
         options:
           - list
-          - activate
           - status
           - seed-live
-      release:
-        description: "For activate only: paste release id or git sha from list"
-        required: false
-        type: string
-        default: ""
-      finalize:
-        description: "⚠ Advanced — delete idle servers after activate (leave false)"
-        type: boolean
-        default: false
 
 concurrency:
   group: deploy-dev-pool
@@ -59,7 +49,7 @@ jobs:
           sudo apt-get install -y jq
           aws --version
 
-      - name: Release management
+      - name: Release history
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
@@ -68,11 +58,6 @@ jobs:
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           ACTION: ${{ github.event.inputs.action }}
-          RELEASE_REF: ${{ github.event.inputs.release }}
-          FINALIZE: ${{ github.event.inputs.finalize }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITHUB_ACTOR: ${{ github.actor }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
@@ -101,6 +86,12 @@ jobs:
               ;;
 
             seed-live)
+              cur="$(./deploy/scripts/release-ledger.sh current || echo '{}')"
+              if [[ "$(jq -r '.id // empty' <<<"$cur")" != "" ]]; then
+                echo "Ledger already has current_id=$(jq -r .id <<<"$cur"). Refuse seed-live." >&2
+                echo "Use list/status instead." >&2
+                exit 2
+              fi
               ./deploy/scripts/resolve-colors.sh > /tmp/colors.env
               # shellcheck disable=SC1091
               set -a; source /tmp/colors.env; set +a
@@ -131,18 +122,8 @@ jobs:
               ./deploy/scripts/release-ledger.sh list
               ;;
 
-            activate)
-              if [[ -z "${RELEASE_REF// }" ]]; then
-                echo "activate requires release= (id or git sha). Run action=list first." >&2
-                exit 2
-              fi
-              args=("$RELEASE_REF")
-              [[ "$FINALIZE" == "true" ]] && args+=(--finalize)
-              ./deploy/scripts/release-activate.sh "${args[@]}"
-              ;;
-
             *)
-              echo "Unknown action: $ACTION (use Ops (Development) for teardown-idle)" >&2
+              echo "Unknown action: $ACTION (activate/rollback was removed for development)" >&2
               exit 2
               ;;
           esac

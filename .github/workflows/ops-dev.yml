@@ -1,12 +1,12 @@
 name: Ops (Development)
 
 # Platform / on-call only — not day-to-day feature work. See docs/deploy-ops.md
-# Shares deploy concurrency so it cannot race Ship / Release cutovers.
+# Shares deploy concurrency so it cannot race Ship cutovers.
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: "status (safe) · teardown-idle (save cost) · set-lb-tag / set-min / destroy-orphans (careful)"
+        description: "status (safe) · teardown-idle · set-lb-tag / set-min / destroy-orphans (careful)"
         required: true
         type: choice
         default: status
@@ -46,6 +46,8 @@ env:
   LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
   AUTOSCALE_POOL_ID_BLUE: ${{ vars.AUTOSCALE_POOL_ID_BLUE }}
   AUTOSCALE_POOL_ID_GREEN: ${{ vars.AUTOSCALE_POOL_ID_GREEN }}
+  POOL_NAME_BLUE: sailing-plans-app-dev
+  POOL_NAME_GREEN: sailing-plans-app-dev-green
 
 jobs:
   run:
@@ -87,6 +89,7 @@ jobs:
               load_colors
               echo "Active=$active_tag Inactive=$inactive_tag"
               echo "active_pool=$active_pool_id inactive_pool=$inactive_pool_id"
+              echo "active_name=$active_pool_name inactive_name=$inactive_pool_name"
               echo
               echo "=== Autoscale pools ==="
               curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
@@ -117,19 +120,31 @@ jobs:
               ;;
 
             set-min)
+              if ! [[ "$MIN" =~ ^[1-9][0-9]*$ ]]; then
+                echo "min must be an integer >= 1 (got: $MIN)" >&2
+                exit 2
+              fi
               load_colors
               if [[ "$POOL" == "blue" ]]; then
-                name="sailing-plans-app-dev"
+                name="$POOL_NAME_BLUE"
                 fallback="$AUTOSCALE_POOL_ID_BLUE"
               else
-                name="sailing-plans-app-dev-green"
+                name="$POOL_NAME_GREEN"
                 fallback="$AUTOSCALE_POOL_ID_GREEN"
               fi
-              id="$(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
-                "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
-                | jq -r --arg n "$name" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
-              id="${id:-$fallback}"
+              # Prefer names from resolve-colors when they match the requested color.
+              if [[ "$active_pool_name" == "$name" && -n "$active_pool_id" ]]; then
+                id="$active_pool_id"
+              elif [[ "$inactive_pool_name" == "$name" && -n "$inactive_pool_id" ]]; then
+                id="$inactive_pool_id"
+              else
+                id="$(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+                  "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
+                  | jq -r --arg n "$name" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
+                id="${id:-$fallback}"
+              fi
               [[ -n "$id" ]] || { echo "Pool $name not found" >&2; exit 1; }
+              echo "Setting $name ($id) min_instances=$MIN"
               ./deploy/scripts/autoscale-set-min.sh "$id" "$MIN"
               ;;
 
@@ -141,6 +156,11 @@ jobs:
 
             destroy-orphans)
               load_colors
+              if [[ -n "${inactive_pool_id:-}" ]]; then
+                echo "Idle pool still exists ($inactive_pool_id / $inactive_pool_name)." >&2
+                echo "Run teardown-idle first. destroy-orphans only scrubs leftovers after teardown." >&2
+                exit 2
+              fi
               mapfile -t ORPHANS < <(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
                 "https://api.digitalocean.com/v2/droplets?tag_name=${inactive_tag}&per_page=200" \
                 | jq -r --arg active "$active_tag" '

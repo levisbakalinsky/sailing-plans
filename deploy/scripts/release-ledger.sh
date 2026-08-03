@@ -135,13 +135,15 @@ case "$ACTION" in
       exit 2
     fi
     tmp="$(mktemp)"
-    load | jq -ce --arg id "$ARG" '
-      (.releases // []) | map(select(.id == $id)) | if length == 0 then error("unknown release: \($id)") else .[0] end
-    ' >/dev/null
     load | jq -c --arg id "$ARG" '
-      .current_id = $id
-      | .releases = [(.releases // [])[] | if .id == $id then .live = true else . end]
-      | .updated_at = (now | todate)
+      (.releases // []) as $rels
+      | if (($rels | map(select(.id == $id)) | length) == 0)
+        then error("unknown release: \($id)")
+        else
+          .current_id = $id
+          | .releases = [($rels)[] | if .id == $id then .live = true else . end]
+          | .updated_at = (now | todate)
+        end
     ' >"$tmp"
     save "$tmp"
     rm -f "$tmp"

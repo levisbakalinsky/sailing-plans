@@ -103,10 +103,10 @@ module "app_pool_blue" {
   depends_on = [module.postgres, module.valkey]
 }
 
-# Opposite color pool. CI owns day-to-day create/delete around cutovers.
-# WARNING: `terraform apply` will recreate this pool if CI deleted it — prefer
-# Ops/Release for pool lifecycle; use TF apply mainly for LB/DB/DNS/tags.
+# Opposite color pool. Ship creates/deletes it around cutovers.
+# Set manage_green_pool=false so apply does not recreate a torn-down idle pool.
 module "app_pool_green" {
+  count  = var.manage_green_pool ? 1 : 0
   source = "../../modules/app_pool"
 
   name                   = "${var.droplet_name}-green"

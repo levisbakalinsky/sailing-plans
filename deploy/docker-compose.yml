@@ -1,4 +1,4 @@
-# Development Droplet stack — images built/pushed by GitHub Actions (Deploy Development).
+# Development Droplet stack — images built/pushed by GitHub Actions (Ship (Development)).
 # Postgres is DigitalOcean Managed DB (Terraform); not run on the Droplet.
 services:
   api:

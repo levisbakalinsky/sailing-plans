@@ -31,4 +31,4 @@ EOF
   echo "Wrote $APP_DIR/.env — edit secrets before first deploy."
 fi
 
-echo "Bootstrap complete. Copy deploy/docker-compose.yml and deploy/Caddyfile here, then run Actions → Deploy Development."
+echo "Bootstrap complete. Copy deploy/docker-compose.yml and deploy/Caddyfile here, then run Actions → Ship (Development)."

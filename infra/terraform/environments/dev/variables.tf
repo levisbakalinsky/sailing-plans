@@ -109,6 +109,12 @@ variable "valkey_allowed_ip_addresses" {
   default     = []
 }
 
+variable "manage_green_pool" {
+  description = "When false, do not create/manage the green autoscale pool (Ship creates it when needed). Keep true if green is live or already present."
+  type        = bool
+  default     = false
+}
+
 variable "pool_min_instances" {
   type    = number
   default = 2
