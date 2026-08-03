@@ -3,7 +3,7 @@
 # Usage:
 #   release-state.sh get
 #   release-state.sh put <json-file>
-# Env: POOL_TAG (or pass via pool-hosts), DIGITALOCEAN_TOKEN, DROPLET_USER, DROPLET_SSH_KEY
+# Env: POOL_TAG, DIGITALOCEAN_TOKEN, DROPLET_USER, DROPLET_SSH_KEY
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,16 +16,29 @@ if [[ "$ACTION" != "get" && "$ACTION" != "put" ]]; then
   exit 2
 fi
 
-if [[ "$ACTION" == "get" ]]; then
-  "$SCRIPT_DIR/ssh-pool.sh" --first-only -- "$(cat <<EOF
-set -euo pipefail
-if [[ -f ${REMOTE_PATH} ]]; then
-  cat ${REMOTE_PATH}
-else
-  echo '{}'
+USER_NAME="${DROPLET_USER:-root}"
+KEY_PATH="$(mktemp)"
+printf '%s\n' "${DROPLET_SSH_KEY}" >"$KEY_PATH"
+chmod 600 "$KEY_PATH"
+cleanup() { rm -f "$KEY_PATH"; }
+trap cleanup EXIT
+
+SSH_OPTS=(-o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes -o LogLevel=ERROR -i "$KEY_PATH")
+mapfile -t HOSTS < <("$SCRIPT_DIR/pool-hosts.sh")
+if [[ "${#HOSTS[@]}" -eq 0 ]]; then
+  echo "No hosts for POOL_TAG=${POOL_TAG:-}" >&2
+  exit 1
 fi
-EOF
-)"
+
+if [[ "$ACTION" == "get" ]]; then
+  raw="$(ssh "${SSH_OPTS[@]}" "${USER_NAME}@${HOSTS[0]}" \
+    "if [[ -f ${REMOTE_PATH} ]]; then cat ${REMOTE_PATH}; else echo '{}'; fi")"
+  # Ensure valid JSON for callers.
+  if ! jq -e . >/dev/null 2>&1 <<<"$raw"; then
+    echo '{}' 
+  else
+    echo "$raw"
+  fi
   exit 0
 fi
 
@@ -34,22 +47,8 @@ if [[ -z "$FILE" || ! -f "$FILE" ]]; then
   exit 2
 fi
 
-KEY_PATH="$(mktemp)"
-printf '%s\n' "${DROPLET_SSH_KEY}" >"$KEY_PATH"
-chmod 600 "$KEY_PATH"
-mapfile -t HOSTS < <("$SCRIPT_DIR/pool-hosts.sh")
-if [[ "${#HOSTS[@]}" -eq 0 ]]; then
-  echo "No hosts for POOL_TAG=${POOL_TAG:-}" >&2
-  rm -f "$KEY_PATH"
-  exit 1
-fi
 for host in "${HOSTS[@]}"; do
-  scp -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
-    -i "$KEY_PATH" \
-    "$FILE" "${DROPLET_USER}@${host}:${REMOTE_PATH}"
-  ssh -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
-    -i "$KEY_PATH" \
-    "${DROPLET_USER}@${host}" "chmod 644 ${REMOTE_PATH}"
-  echo "Wrote release state to ${host}"
+  scp "${SSH_OPTS[@]}" "$FILE" "${USER_NAME}@${host}:${REMOTE_PATH}"
+  ssh "${SSH_OPTS[@]}" "${USER_NAME}@${host}" "chmod 644 ${REMOTE_PATH}"
+  echo "Wrote release state to ${host}" >&2
 done
-rm -f "$KEY_PATH"
