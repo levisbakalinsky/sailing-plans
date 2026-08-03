@@ -38,3 +38,4 @@ cloudflare_domains = [
   "sailingplans.net",
   "sailingplans.org",
 ]
+cloudflare_canonical_domain = "sailingplans.com"

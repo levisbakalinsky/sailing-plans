@@ -47,7 +47,7 @@ Public (Cloudflare → LB):
 - https://sailingplans.com/health
 - https://sailingplans.com/api/health
 
-Also live: `.net` / `.org` (same stack).
+`.net` / `.org` (and www) 301-redirect to `https://sailingplans.com`.
 
 Direct LB (ops):
 

@@ -143,3 +143,9 @@ variable "cloudflare_domains" {
     "sailingplans.org",
   ]
 }
+
+variable "cloudflare_canonical_domain" {
+  description = "Primary domain; other cloudflare_domains 301-redirect here."
+  type        = string
+  default     = "sailingplans.com"
+}

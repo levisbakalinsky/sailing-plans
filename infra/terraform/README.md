@@ -105,6 +105,8 @@ Public hostnames (proxied / orange-cloud) point at the DO Load Balancer:
 
 SSL mode is **Flexible** (Cloudflare HTTPS → origin HTTP on LB `:80`) with **Always Use HTTPS** on. Upgrade to Full (Strict) later with a Cloudflare Origin CA cert on Caddy.
 
+`.net` and `.org` (including `www`) **301 redirect** to `https://sailingplans.com` (path + query preserved) via Cloudflare Single Redirect rules (configured in the Cloudflare dashboard; not yet managed by Terraform API tokens on this account).
+
 ### SSH lockdown
 
 Do **not** CIDR-restrict port 22 while deploys use GitHub-hosted runners over SSH. Options later: self-hosted runner, Tailscale/VPN allowlist, or replace SSH deploy with an in-VPC agent.

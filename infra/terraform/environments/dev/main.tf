@@ -67,6 +67,7 @@ module "cloudflare_dns" {
   source = "../../modules/cloudflare_dns"
 
   domains          = var.cloudflare_domains
+  canonical_domain = var.cloudflare_canonical_domain
   origin_ipv4      = module.app_pool.loadbalancer_ip
   proxied          = true
   ssl_mode         = "flexible"
