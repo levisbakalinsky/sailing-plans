@@ -4,14 +4,22 @@ on:
   workflow_dispatch:
     inputs:
       pool:
-        description: Which pool to scale
+        description: Which pool to scale or delete
         required: true
         type: choice
         options:
           - blue
           - green
+      action:
+        description: Scale min_instances, or delete the whole pool
+        required: true
+        type: choice
+        default: set-min
+        options:
+          - set-min
+          - delete
       min:
-        description: min_instances (DO requires >= 1)
+        description: min_instances when action=set-min (DO requires >= 1)
         required: true
         type: string
         default: "1"
@@ -34,19 +42,33 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Set pool min_instances
+      - name: Apply pool action
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           POOL: ${{ github.event.inputs.pool }}
+          ACTION: ${{ github.event.inputs.action }}
           MIN: ${{ github.event.inputs.min }}
           AUTOSCALE_POOL_ID_BLUE: ${{ vars.AUTOSCALE_POOL_ID_BLUE }}
           AUTOSCALE_POOL_ID_GREEN: ${{ vars.AUTOSCALE_POOL_ID_GREEN }}
+          ACTIVE_COLOR_TAG: ${{ vars.ACTIVE_COLOR_TAG }}
+          BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
+          GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
           if [[ "$POOL" == "blue" ]]; then
             POOL_ID="$AUTOSCALE_POOL_ID_BLUE"
+            TAG="$BLUE_TAG"
           else
             POOL_ID="$AUTOSCALE_POOL_ID_GREEN"
+            TAG="$GREEN_TAG"
           fi
-          ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" "$MIN"
+          if [[ "$ACTION" == "delete" ]]; then
+            if [[ "$ACTIVE_COLOR_TAG" == "$TAG" ]]; then
+              echo "Refusing to delete the active color ($TAG)" >&2
+              exit 1
+            fi
+            ./deploy/scripts/autoscale-delete.sh "$POOL_ID"
+          else
+            ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" "$MIN"
+          fi

@@ -103,8 +103,8 @@ module "app_pool_blue" {
   depends_on = [module.postgres, module.valkey]
 }
 
-# Standby color. DO requires min_instances >= 1; CI scales to baseline for cutover,
-# then scales the previous color back to 1 after flip.
+# Opposite color. CI deletes the idle pool after cutover (DO cannot keep min=0)
+# and recreates it on the next deploy. min_instances here is only the create default.
 module "app_pool_green" {
   source = "../../modules/app_pool"
 
@@ -116,7 +116,7 @@ module "app_pool_green" {
   image                  = var.droplet_image
   vpc_uuid               = var.vpc_uuid
   ssh_key_fingerprints   = [data.digitalocean_ssh_key.deploy.fingerprint]
-  min_instances          = 1
+  min_instances          = var.pool_min_instances
   max_instances          = var.pool_max_instances
   target_cpu_utilization = var.pool_target_cpu_utilization
   cooldown_minutes       = var.pool_cooldown_minutes

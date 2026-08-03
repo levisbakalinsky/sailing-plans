@@ -25,7 +25,7 @@ on:
           - web
           - proxy
       finalize:
-        description: After cutover, scale the old color back to standby (1)
+        description: After cutover, delete the old color pool (droplets gone)
         type: boolean
         default: true
       skip_cutover:
@@ -112,6 +112,7 @@ jobs:
       inactive_tag: ${{ steps.colors.outputs.inactive_tag }}
       inactive_pool_id: ${{ steps.colors.outputs.inactive_pool_id }}
       active_pool_id: ${{ steps.colors.outputs.active_pool_id }}
+      inactive_pool_name: ${{ steps.colors.outputs.inactive_pool_name }}
       baseline_min: ${{ steps.colors.outputs.baseline_min }}
     steps:
       - uses: actions/checkout@v7
@@ -157,10 +158,12 @@ jobs:
             inactive="$GREEN_TAG"
             inactive_pool="$AUTOSCALE_POOL_ID_GREEN"
             active_pool="$AUTOSCALE_POOL_ID_BLUE"
+            inactive_name="sailing-plans-app-dev-green"
           elif [[ "$active" == "$GREEN_TAG" ]]; then
             inactive="$BLUE_TAG"
             inactive_pool="$AUTOSCALE_POOL_ID_BLUE"
             active_pool="$AUTOSCALE_POOL_ID_GREEN"
+            inactive_name="sailing-plans-app-dev"
           else
             echo "Unexpected LB tag '$active' (expected $BLUE_TAG or $GREEN_TAG)" >&2
             exit 1
@@ -169,6 +172,7 @@ jobs:
           echo "inactive_tag=$inactive" >> "$GITHUB_OUTPUT"
           echo "inactive_pool_id=$inactive_pool" >> "$GITHUB_OUTPUT"
           echo "active_pool_id=$active_pool" >> "$GITHUB_OUTPUT"
+          echo "inactive_pool_name=$inactive_name" >> "$GITHUB_OUTPUT"
           echo "baseline_min=$BASELINE_MIN" >> "$GITHUB_OUTPUT"
           echo "Active=$active Inactive=$inactive"
 
@@ -176,6 +180,8 @@ jobs:
     needs: [changes, resolve-colors]
     runs-on: ubuntu-latest
     environment: development
+    outputs:
+      inactive_pool_id: ${{ steps.ensure.outputs.inactive_pool_id }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -186,16 +192,34 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Scale inactive color to baseline
+      - name: Ensure inactive pool + scale to baseline
+        id: ensure
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           POOL_ID: ${{ needs.resolve-colors.outputs.inactive_pool_id }}
+          POOL_NAME: ${{ needs.resolve-colors.outputs.inactive_pool_name }}
+          COLOR_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+          SHARED_TAG: ${{ env.POOL_TAG }}
+          CLONE_FROM: ${{ needs.resolve-colors.outputs.active_pool_id }}
           MIN: ${{ needs.resolve-colors.outputs.baseline_min }}
           INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+          GREEN_TAG: ${{ env.GREEN_TAG }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" "$MIN"
+          # Recreate inactive pool if a prior finalize deleted it (DO cannot keep min=0).
+          out="$(./deploy/scripts/autoscale-ensure.sh \
+            "$POOL_ID" "$POOL_NAME" "$COLOR_TAG" "$SHARED_TAG" "$CLONE_FROM" "$MIN")"
+          echo "$out"
+          new_id="$(sed -n 's/^pool_id=//p' <<<"$out" | tail -n1)"
+          echo "inactive_pool_id=$new_id" >> "$GITHUB_OUTPUT"
+          # Best-effort refresh of the color pool id variable for next runs.
+          if [[ "$COLOR_TAG" == "$GREEN_TAG" ]]; then
+            gh variable set AUTOSCALE_POOL_ID_GREEN --env development --body "$new_id" || true
+          else
+            gh variable set AUTOSCALE_POOL_ID_BLUE --env development --body "$new_id" || true
+          fi
           ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900
 
   build-api:
@@ -542,12 +566,13 @@ jobs:
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Scale previous color to standby (min=1)
+      - name: Delete previous color pool
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           POOL_ID: ${{ needs.resolve-colors.outputs.active_pool_id }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          # DigitalOcean autoscale pools require min_instances >= 1.
-          ./deploy/scripts/autoscale-set-min.sh "$POOL_ID" 1
+          # DO cannot scale a pool to 0; delete the old color so we return to baseline (2).
+          # Next deploy recreates it via autoscale-ensure.sh.
+          ./deploy/scripts/autoscale-delete.sh "$POOL_ID"

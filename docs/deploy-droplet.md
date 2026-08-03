@@ -9,7 +9,7 @@ Development runs on DigitalOcean **Droplet Autoscale Pools** (blue + green) behi
 ## Order of operations
 
 1. If schema changed → run **Migrate Development**
-2. Run **Deploy Development** (builds images, brings up the inactive color, health-checks, flips LB, scales old color to 0)
+2. Run **Deploy Development** (builds images, brings up the inactive color, health-checks, flips LB, deletes old color)
 
 Do **not** run migrations inside the app deploy.
 
@@ -17,17 +17,17 @@ Do **not** run migrations inside the app deploy.
 
 | Step | What happens |
 | --- | --- |
-| Resolve colors | Read LB `droplet_tag` (blue or green); other color is inactive |
-| Scale inactive | Set inactive pool `min_instances` to baseline (2); wait for healthy hosts |
+| Resolve colors | Read LB tag (blue or green); other color is inactive |
+| Scale inactive | Recreate inactive pool if missing; set `min_instances` to baseline (2); wait for healthy hosts |
 | Deploy | Push new images / proxy config **only** to inactive color |
 | Health-check | Require baseline hosts on inactive tag returning `/health` 200 |
 | Cutover | Point LB at inactive color tag |
-| Finalize | Scale previous color `min_instances` → 1 (standby) |
+| Finalize | **Delete** the previous color pool (returns to ~2 droplets) |
 
-DigitalOcean autoscale pools require `min_instances >= 1`, so the idle color keeps one standby droplet (not zero).
+DigitalOcean cannot keep an autoscale pool at `min_instances = 0`, so finalize deletes the old pool instead of leaving a standby node. The next deploy recreates it.
 
-Rollback before cutover: cancel the workflow / leave LB on the active color; scale inactive back to 1.  
-Rollback after cutover: flip LB tag back to the previous color (old fleet still up until finalize).
+Rollback before cutover: cancel the workflow / leave LB on the active color; delete the inactive pool if it was scaled up.  
+Rollback after cutover (before finalize): flip LB tag back to the previous color.
 
 ## Topology
 

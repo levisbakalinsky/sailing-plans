@@ -89,15 +89,16 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 | Setting | Default |
 | --- | --- |
 | Active color min / max | 2 / 4 |
-| Standby color min / max | 1 / 4 (DO requires min ≥ 1) |
+| Idle color | Deleted after cutover (DO cannot keep min = 0) |
 | Size | `s-2vcpu-4gb` |
 | CPU target | 0.7 |
 | Cooldown | 10 minutes |
-| LB | `lb-small`, HTTP `:80` → `:80`, health `/health`; `droplet_tag` flipped by CI |
+| LB | `lb-small`, HTTP `:80` → `:80`, health `/health`; tag flipped by CI |
 | Shared tag | `sailing-plans-app-dev-pool` (DB/Valkey/firewall) |
 | Color tags | `…-pool-blue`, `…-pool-green` |
 
-Deploy flow: scale inactive → deploy → health → flip LB tag → scale previous color to standby (1).  
+Deploy flow: ensure/scale inactive → deploy → health → flip LB tag → **delete** previous color pool.  
+A later `terraform apply` may recreate a deleted color pool; delete it again or `terraform state rm` that module if you want TF to stop managing it.  
 Migrations are a separate workflow (`Migrate Development`).
 
 ## Managed Postgres (dev)
