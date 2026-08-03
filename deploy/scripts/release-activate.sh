@@ -31,8 +31,7 @@ BLUE_TAG="${BLUE_TAG:-sailing-plans-app-dev-pool-blue}"
 GREEN_TAG="${GREEN_TAG:-sailing-plans-app-dev-pool-green}"
 SHARED_POOL_TAG="${SHARED_POOL_TAG:-sailing-plans-app-dev-pool}"
 BASELINE_MIN="${BASELINE_MIN:-2}"
-AUTOSCALE_POOL_ID_BLUE="${AUTOSCALE_POOL_ID_BLUE:-}"
-AUTOSCALE_POOL_ID_GREEN="${AUTOSCALE_POOL_ID_GREEN:-}"
+POOL_TAG="$SHARED_POOL_TAG"
 
 release="$("$SCRIPT_DIR/release-ledger.sh" get "$TARGET_REF")"
 rel_id="$(jq -r '.id' <<<"$release")"
@@ -48,41 +47,27 @@ fi
 echo "Activating release:"
 jq . <<<"$release"
 
-active="$("$SCRIPT_DIR/lb-get-tag.sh")"
-if [[ "$active" == "$SHARED_POOL_TAG" || -z "$active" ]]; then
-  active="$BLUE_TAG"
-fi
-if [[ "$active" == "$BLUE_TAG" ]]; then
-  inactive="$GREEN_TAG"
-  inactive_pool="$AUTOSCALE_POOL_ID_GREEN"
-  inactive_name="sailing-plans-app-dev-green"
-  active_name="sailing-plans-app-dev"
-  active_pool="$AUTOSCALE_POOL_ID_BLUE"
-elif [[ "$active" == "$GREEN_TAG" ]]; then
-  inactive="$BLUE_TAG"
-  inactive_pool="$AUTOSCALE_POOL_ID_BLUE"
-  inactive_name="sailing-plans-app-dev"
-  active_name="sailing-plans-app-dev-green"
-  active_pool="$AUTOSCALE_POOL_ID_GREEN"
-else
-  echo "Unexpected LB tag: $active" >&2
+"$SCRIPT_DIR/resolve-colors.sh" > /tmp/colors.env
+# shellcheck disable=SC1091
+set -a; source /tmp/colors.env; set +a
+
+inactive="$inactive_tag"
+inactive_pool="$inactive_pool_id"
+inactive_name="$inactive_pool_name"
+active="$active_tag"
+active_name="$active_pool_name"
+active_pool="$active_pool_id"
+clone_from="$active_pool_id"
+
+if [[ -z "$clone_from" ]]; then
+  echo "Active pool missing; cannot clone template for $inactive_name" >&2
   exit 1
 fi
 
-resolve_pool_id() {
-  local name="$1" fallback="$2"
-  local found
-  found="$(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
-    "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
-    | jq -r --arg n "$name" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
-  echo "${found:-$fallback}"
-}
-
-clone_from="$(resolve_pool_id "$active_name" "$active_pool")"
 echo "Active=$active → deploy $rel_id onto $inactive"
 
 out="$("$SCRIPT_DIR/autoscale-ensure.sh" \
-  "$inactive_pool" "$inactive_name" "$inactive" "$SHARED_POOL_TAG" "$clone_from" "$BASELINE_MIN")"
+  "${inactive_pool:-}" "$inactive_name" "$inactive" "$SHARED_POOL_TAG" "$clone_from" "$BASELINE_MIN")"
 echo "$out"
 new_id="$(sed -n 's/^pool_id=//p' <<<"$out" | tail -n1)"
 
@@ -107,7 +92,6 @@ EOF
 )"
 
 "$SCRIPT_DIR/wait-pool-hosts.sh" "$inactive" "$BASELINE_MIN" 600
-
 "$SCRIPT_DIR/lb-set-tag.sh" "$inactive"
 for i in $(seq 1 36); do
   if curl -fsS "http://${LB_HOST}/health" >/dev/null; then
@@ -123,7 +107,6 @@ done
 
 "$SCRIPT_DIR/release-ledger.sh" set-current "$rel_id"
 
-# Host-local pointer for quick status / migrate host selection.
 state="$(jq -nc \
   --arg id "$rel_id" \
   --arg api "$api_image" \
@@ -152,10 +135,11 @@ else
 fi
 
 if [[ "$FINALIZE" == "true" ]]; then
-  idle_id="$(resolve_pool_id "$active_name" "$active_pool")"
-  "$SCRIPT_DIR/autoscale-delete.sh" "$idle_id" "$active" "$inactive"
+  if [[ -n "$active_pool" ]]; then
+    "$SCRIPT_DIR/autoscale-delete.sh" "$active_pool" "$active" "$inactive"
+  fi
 else
-  echo "Idle color $active kept. Use teardown-idle when you no longer need instant switches."
+  echo "Idle color $active kept. Use Ops Development → teardown-idle when done."
 fi
 
 echo "Activated $rel_id on $inactive"

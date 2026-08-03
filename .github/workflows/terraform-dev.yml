@@ -20,6 +20,10 @@ on:
         description: "Apply the plan after validate (creates/updates DO resources)"
         type: boolean
         default: false
+      bootstrap_lb_blue:
+        description: "Only for first-time setup: force LB tag to blue (never use after green is live)"
+        type: boolean
+        default: false
       wire_pool_database_url:
         description: "After apply, write private DATABASE_URL + REDIS_URL into every pool Droplet .env and restart api"
         type: boolean
@@ -76,15 +80,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         run: terraform init -backend-config=backend.hcl -input=false
 
-      # Mutates remote state; skip on PRs so forks/reviews don't rewrite production state.
-      - name: Migrate state for blue/green (idempotent)
-        if: github.event_name != 'pull_request'
-        env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: bash "${GITHUB_WORKSPACE}/deploy/scripts/tf-state-bluegreen.sh"
-
       - name: terraform plan
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
@@ -125,21 +120,20 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         run: terraform init -backend-config=backend.hcl -input=false
 
-      - name: Migrate state for blue/green (idempotent)
-        env:
-          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
-        run: bash "${GITHUB_WORKSPACE}/deploy/scripts/tf-state-bluegreen.sh"
+      - name: Download plan artifact
+        uses: actions/download-artifact@v5
+        with:
+          name: tfplan-dev
+          path: ${{ github.workspace }}
 
-      - name: terraform apply
+      - name: terraform apply (from plan)
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
           TF_VAR_ghcr_pull_token: ${{ secrets.GHCR_PULL_TOKEN }}
-        run: terraform apply -input=false -auto-approve
+        run: terraform apply -input=false "${GITHUB_WORKSPACE}/infra/terraform/environments/dev/tfplan"
 
       - name: Print pool endpoints
         env:
@@ -156,13 +150,12 @@ jobs:
           echo "autoscale_pool_id_blue=$(terraform output -raw autoscale_pool_id_blue)"
           echo "autoscale_pool_id_green=$(terraform output -raw autoscale_pool_id_green)"
           echo "health_url=$(terraform output -raw health_url)"
-          echo "After apply, set GitHub env vars AUTOSCALE_POOL_ID_GREEN + ACTIVE_COLOR_TAG from outputs above."
+          echo "NOTE: CI deletes idle pools; a later apply may recreate them. Prefer Ops/Release for pool lifecycle."
 
-      - name: Point LB at blue color tag (first cutover)
+      - name: Bootstrap LB → blue (opt-in only)
+        if: inputs.bootstrap_lb_blue
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.SPACES_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.SPACES_SECRET_ACCESS_KEY }}
         working-directory: ${{ github.workspace }}
         run: |
           set -euo pipefail
@@ -170,18 +163,11 @@ jobs:
           chmod +x deploy/scripts/*.sh
           export LOADBALANCER_ID="$(cd infra/terraform/environments/dev && terraform output -raw loadbalancer_id)"
           export BLUE_TAG="$(cd infra/terraform/environments/dev && terraform output -raw blue_tag)"
-          # Tag existing shared-tag droplets with blue so LB can attach before template roll finishes.
-          mapfile -t DROPLET_IDS < <(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
-            "https://api.digitalocean.com/v2/droplets?tag_name=$(cd infra/terraform/environments/dev && terraform output -raw pool_tag)&per_page=200" \
-            | jq -r '.droplets[].id')
-          if [[ "${#DROPLET_IDS[@]}" -gt 0 ]]; then
-            resources="$(printf '%s\n' "${DROPLET_IDS[@]}" | jq -R '{resource_id:., resource_type:"droplet"}' | jq -s '{resources:.}')"
-            curl -fsS -X POST \
-              -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
-              -H "Content-Type: application/json" \
-              -d "$resources" \
-              "https://api.digitalocean.com/v2/tags/${BLUE_TAG}/resources" >/dev/null
-            echo "Tagged ${#DROPLET_IDS[@]} droplet(s) with $BLUE_TAG"
+          current="$(./deploy/scripts/lb-get-tag.sh || true)"
+          echo "Current LB tag: ${current:-empty}"
+          if [[ -n "$current" && "$current" != "$(cd infra/terraform/environments/dev && terraform output -raw pool_tag)" && "$current" != "$BLUE_TAG" ]]; then
+            echo "Refusing bootstrap_lb_blue: LB already on $current (would disrupt live color)" >&2
+            exit 1
           fi
           ./deploy/scripts/lb-set-tag.sh "$BLUE_TAG"
 

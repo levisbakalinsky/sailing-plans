@@ -1,11 +1,11 @@
 name: Release Development
 
-# Release management for dev: list history, activate any past build by id/sha.
+# Release ledger: list history and activate any past build by id/sha.
 on:
   workflow_dispatch:
     inputs:
       action:
-        description: list | activate | status | teardown-idle
+        description: list | activate | status | seed-live
         required: true
         type: choice
         default: list
@@ -14,9 +14,8 @@ on:
           - activate
           - status
           - seed-live
-          - teardown-idle
       release:
-        description: "Release id or git sha prefix (required for activate). Example: 20260803T052130Z-a1b2c3d4e5f6 or a1b2c3d4e5f6"
+        description: "For activate: release id or git sha (see action=list)"
         required: false
         type: string
         default: ""
@@ -31,6 +30,7 @@ concurrency:
 
 env:
   SHARED_POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+  POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
   BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
   GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
   BASELINE_MIN: ${{ vars.BASELINE_MIN || '2' }}
@@ -56,7 +56,6 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y jq
-          # awscli v2 is usually preinstalled on ubuntu-latest; ensure present
           aws --version
 
       - name: Release management
@@ -77,100 +76,72 @@ jobs:
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
 
-          if [[ "$ACTION" == "list" ]]; then
-            echo "=== Dev release ledger (* = current) ==="
-            ./deploy/scripts/release-ledger.sh list
-            exit 0
-          fi
+          case "$ACTION" in
+            list)
+              echo "=== Dev release ledger (* = current) ==="
+              ./deploy/scripts/release-ledger.sh list
+              ;;
 
-          if [[ "$ACTION" == "seed-live" ]]; then
-            active="$(./deploy/scripts/lb-get-tag.sh)"
-            if [[ "$active" != "$BLUE_TAG" && "$active" != "$GREEN_TAG" ]]; then
-              active="$GREEN_TAG"
-            fi
-            export POOL_TAG="$active"
-            host_env="$(./deploy/scripts/ssh-pool.sh --first-only -- \
-              'cd /opt/sailing-plans && grep -E "^(API_IMAGE|WEB_IMAGE)=" .env || true')"
-            api_image="$(grep -E '^API_IMAGE=' <<<"$host_env" | head -n1 | cut -d= -f2-)"
-            web_image="$(grep -E '^WEB_IMAGE=' <<<"$host_env" | head -n1 | cut -d= -f2-)"
-            if [[ -z "$api_image" || -z "$web_image" ]]; then
-              echo "Could not read API_IMAGE/WEB_IMAGE from live hosts" >&2
-              exit 1
-            fi
-            # Prefer sha from image tag if present
-            short="$(sed -n 's/.*:\([A-Fa-f0-9]\{7,40\}\)$/\1/p' <<<"$api_image" | head -n1)"
-            [[ -n "$short" ]] || short="$(date -u +%H%M%S)"
-            rid="$(date -u +%Y%m%dT%H%M%SZ)-${short}"
-            release="$(jq -nc \
-              --arg id "$rid" \
-              --arg sha "$short" \
-              --arg short "$short" \
-              --arg api "$api_image" \
-              --arg web "$web_image" \
-              '{
-                id:$id, git_sha:$sha, git_sha_short:$short,
-                api_image:$api, web_image:$web,
-                message:"seeded from live",
-                live:true, created_at:(now|todate), source:"seed-live"
-              }')"
-            echo "$release" | jq .
-            ./deploy/scripts/release-ledger.sh append "$release"
-            ./deploy/scripts/release-ledger.sh set-current "$rid"
-            ./deploy/scripts/release-ledger.sh list
-            exit 0
-          fi
+            status)
+              ./deploy/scripts/resolve-colors.sh > /tmp/colors.env
+              # shellcheck disable=SC1091
+              set -a; source /tmp/colors.env; set +a
+              echo "LB active=$active_tag idle=$inactive_tag"
+              echo
+              echo "=== Current release ==="
+              ./deploy/scripts/release-ledger.sh current || echo "{}"
+              echo
+              echo "=== Recent releases ==="
+              ./deploy/scripts/release-ledger.sh list
+              echo
+              echo "=== Host release.json ==="
+              export POOL_TAG="$active_tag"
+              ./deploy/scripts/release-state.sh get || echo '{}'
+              ;;
 
-          if [[ "$ACTION" == "status" ]]; then
-            echo "=== LB / colors ==="
-            active="$(./deploy/scripts/lb-get-tag.sh || true)"
-            echo "LB tag: ${active:-empty}"
-            echo
-            echo "=== Current release ==="
-            ./deploy/scripts/release-ledger.sh current || echo "{}"
-            echo
-            echo "=== Recent releases ==="
-            ./deploy/scripts/release-ledger.sh list
-            echo
-            echo "=== Host release.json (active color) ==="
-            if [[ "$active" == "$BLUE_TAG" || "$active" == "$GREEN_TAG" ]]; then
-              export POOL_TAG="$active"
-            else
-              export POOL_TAG="$GREEN_TAG"
-            fi
-            ./deploy/scripts/release-state.sh get || echo '{}'
-            exit 0
-          fi
+            seed-live)
+              ./deploy/scripts/resolve-colors.sh > /tmp/colors.env
+              # shellcheck disable=SC1091
+              set -a; source /tmp/colors.env; set +a
+              export POOL_TAG="$active_tag"
+              host_env="$(./deploy/scripts/ssh-pool.sh --first-only -- \
+                'cd /opt/sailing-plans && grep -E "^(API_IMAGE|WEB_IMAGE)=" .env || true')"
+              api_image="$(grep -E '^API_IMAGE=' <<<"$host_env" | head -n1 | cut -d= -f2-)"
+              web_image="$(grep -E '^WEB_IMAGE=' <<<"$host_env" | head -n1 | cut -d= -f2-)"
+              if [[ -z "$api_image" || -z "$web_image" ]]; then
+                echo "Could not read API_IMAGE/WEB_IMAGE from live hosts" >&2
+                exit 1
+              fi
+              short="$(sed -n 's/.*:\([A-Fa-f0-9]\{7,40\}\)$/\1/p' <<<"$api_image" | head -n1)"
+              [[ -n "$short" ]] || short="$(date -u +%H%M%S)"
+              rid="$(date -u +%Y%m%dT%H%M%SZ)-${short}"
+              release="$(jq -nc \
+                --arg id "$rid" --arg sha "$short" --arg short "$short" \
+                --arg api "$api_image" --arg web "$web_image" \
+                '{
+                  id:$id, git_sha:$sha, git_sha_short:$short,
+                  api_image:$api, web_image:$web,
+                  message:"seeded from live",
+                  live:true, created_at:(now|todate), source:"seed-live"
+                }')"
+              echo "$release" | jq .
+              ./deploy/scripts/release-ledger.sh append "$release"
+              ./deploy/scripts/release-ledger.sh set-current "$rid"
+              ./deploy/scripts/release-ledger.sh list
+              ;;
 
-          if [[ "$ACTION" == "teardown-idle" ]]; then
-            active="$(./deploy/scripts/lb-get-tag.sh)"
-            if [[ "$active" == "$BLUE_TAG" ]]; then
-              inactive="$GREEN_TAG"; inactive_name="sailing-plans-app-dev-green"; keep="$BLUE_TAG"
-              fallback="$AUTOSCALE_POOL_ID_GREEN"
-            else
-              inactive="$BLUE_TAG"; inactive_name="sailing-plans-app-dev"; keep="$GREEN_TAG"
-              fallback="$AUTOSCALE_POOL_ID_BLUE"
-            fi
-            found="$(curl -fsS -H "Authorization: Bearer ${DIGITALOCEAN_TOKEN}" \
-              "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
-              | jq -r --arg n "$inactive_name" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
-            ./deploy/scripts/autoscale-delete.sh "${found:-$fallback}" "$inactive" "$keep"
-            echo "Idle color torn down."
-            exit 0
-          fi
+            activate)
+              if [[ -z "${RELEASE_REF// }" ]]; then
+                echo "activate requires release= (id or git sha). Run action=list first." >&2
+                exit 2
+              fi
+              args=("$RELEASE_REF")
+              [[ "$FINALIZE" == "true" ]] && args+=(--finalize)
+              ./deploy/scripts/release-activate.sh "${args[@]}"
+              ;;
 
-          if [[ "$ACTION" == "activate" ]]; then
-            if [[ -z "${RELEASE_REF// }" ]]; then
-              echo "action=activate requires the release input (id or git sha)." >&2
-              echo "Run action=list to see available releases." >&2
+            *)
+              echo "Unknown action: $ACTION (use Ops Development for teardown-idle)" >&2
               exit 2
-            fi
-            args=("$RELEASE_REF")
-            if [[ "$FINALIZE" == "true" ]]; then
-              args+=(--finalize)
-            fi
-            ./deploy/scripts/release-activate.sh "${args[@]}"
-            exit 0
-          fi
-
-          echo "Unknown action: $ACTION" >&2
-          exit 2
+              ;;
+          esac

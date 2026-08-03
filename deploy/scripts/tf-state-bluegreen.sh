@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Idempotent Terraform state moves for blue/green app_pool refactor.
+# ONE-TIME helper: Terraform state moves for the blue/green app_pool refactor.
+# Already applied in production; kept for disaster recovery only.
 # Run from infra/terraform/environments/dev after terraform init.
 set -euo pipefail
 

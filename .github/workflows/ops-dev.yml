@@ -1,0 +1,170 @@
+name: Ops Development
+
+# Manual ops for the blue/green pool. Shares deploy concurrency so it cannot
+# race Deploy/Release cutovers.
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Ops action
+        required: true
+        type: choice
+        default: status
+        options:
+          - status
+          - set-lb-tag
+          - set-min
+          - teardown-idle
+          - destroy-orphans
+      tag:
+        description: "For set-lb-tag: color tag (blue/green)"
+        required: false
+        type: string
+        default: ""
+      pool:
+        description: "For set-min: which pool"
+        type: choice
+        default: blue
+        options: [blue, green]
+      min:
+        description: "For set-min: min_instances (>= 1)"
+        type: string
+        default: "2"
+      dry_run:
+        description: "For destroy-orphans: list only"
+        type: boolean
+        default: false
+
+concurrency:
+  group: deploy-dev-pool
+  cancel-in-progress: false
+
+env:
+  SHARED_POOL_TAG: ${{ vars.POOL_TAG || 'sailing-plans-app-dev-pool' }}
+  BLUE_TAG: ${{ vars.BLUE_TAG || 'sailing-plans-app-dev-pool-blue' }}
+  GREEN_TAG: ${{ vars.GREEN_TAG || 'sailing-plans-app-dev-pool-green' }}
+  LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
+  AUTOSCALE_POOL_ID_BLUE: ${{ vars.AUTOSCALE_POOL_ID_BLUE }}
+  AUTOSCALE_POOL_ID_GREEN: ${{ vars.AUTOSCALE_POOL_ID_GREEN }}
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Run ops action
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
+          ACTION: ${{ github.event.inputs.action }}
+          TAG_INPUT: ${{ github.event.inputs.tag }}
+          POOL: ${{ github.event.inputs.pool }}
+          MIN: ${{ github.event.inputs.min }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+
+          load_colors() {
+            ./deploy/scripts/resolve-colors.sh > /tmp/colors.env
+            # shellcheck disable=SC1091
+            set -a; source /tmp/colors.env; set +a
+          }
+
+          case "$ACTION" in
+            status)
+              load_colors
+              echo "Active=$active_tag Inactive=$inactive_tag"
+              echo "active_pool=$active_pool_id inactive_pool=$inactive_pool_id"
+              echo
+              echo "=== Autoscale pools ==="
+              curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+                "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
+                | jq -r '.autoscale_pools[]? | select(.name|test("sailing-plans")) | "\(.id) \(.name) min=\(.config.min_instances) active=\(.active_resources_count) status=\(.status)"'
+              echo
+              echo "=== Droplets ==="
+              curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+                "https://api.digitalocean.com/v2/droplets?per_page=200" \
+                | jq -r '.droplets[]? | select(.name|test("sailing-plans")) | "\(.id) \(.name) status=\(.status) tags=\(.tags|join(","))"'
+              ;;
+
+            set-lb-tag)
+              tag="${TAG_INPUT:-}"
+              if [[ -z "$tag" ]]; then
+                echo "tag input required for set-lb-tag" >&2
+                exit 2
+              fi
+              ./deploy/scripts/lb-set-tag.sh "$tag"
+              for i in $(seq 1 36); do
+                code="$(curl -sS -o /dev/null -w '%{http_code}' "http://${LB_HOST}/health" || true)"
+                echo "health http=$code"
+                [[ "$code" == "200" ]] && exit 0
+                sleep 5
+              done
+              echo "LB still unhealthy" >&2
+              exit 1
+              ;;
+
+            set-min)
+              load_colors
+              if [[ "$POOL" == "blue" ]]; then
+                name="sailing-plans-app-dev"
+                fallback="$AUTOSCALE_POOL_ID_BLUE"
+              else
+                name="sailing-plans-app-dev-green"
+                fallback="$AUTOSCALE_POOL_ID_GREEN"
+              fi
+              id="$(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+                "https://api.digitalocean.com/v2/droplets/autoscale?per_page=200" \
+                | jq -r --arg n "$name" '.autoscale_pools[]? | select(.name==$n) | .id' | head -n1)"
+              id="${id:-$fallback}"
+              [[ -n "$id" ]] || { echo "Pool $name not found" >&2; exit 1; }
+              ./deploy/scripts/autoscale-set-min.sh "$id" "$MIN"
+              ;;
+
+            teardown-idle)
+              load_colors
+              [[ -n "$inactive_pool_id" ]] || { echo "No idle pool to tear down" >&2; exit 0; }
+              ./deploy/scripts/autoscale-delete.sh "$inactive_pool_id" "$inactive_tag" "$active_tag"
+              ;;
+
+            destroy-orphans)
+              load_colors
+              mapfile -t ORPHANS < <(curl -fsS -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+                "https://api.digitalocean.com/v2/droplets?tag_name=${inactive_tag}&per_page=200" \
+                | jq -r --arg active "$active_tag" '
+                  .droplets[]?
+                  | select((.tags // []) | index($active) | not)
+                  | "\(.id)\t\(.name)"
+                ')
+              if [[ "${#ORPHANS[@]}" -eq 0 ]]; then
+                echo "No orphan droplets"
+                exit 0
+              fi
+              for row in "${ORPHANS[@]}"; do
+                id="${row%%$'\t'*}"; name="${row#*$'\t'}"
+                echo "Orphan: $id $name"
+                if [[ "$DRY_RUN" == "true" ]]; then continue; fi
+                code="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+                  -H "Authorization: Bearer $DIGITALOCEAN_TOKEN" \
+                  "https://api.digitalocean.com/v2/droplets/${id}")"
+                echo "  delete http=$code"
+              done
+              ;;
+
+            *)
+              echo "Unknown action: $ACTION" >&2
+              exit 2
+              ;;
+          esac

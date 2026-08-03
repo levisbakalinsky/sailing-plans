@@ -103,8 +103,9 @@ module "app_pool_blue" {
   depends_on = [module.postgres, module.valkey]
 }
 
-# Opposite color. CI deletes the idle pool after cutover (DO cannot keep min=0)
-# and recreates it on the next deploy. min_instances here is only the create default.
+# Opposite color pool. CI owns day-to-day create/delete around cutovers.
+# WARNING: `terraform apply` will recreate this pool if CI deleted it — prefer
+# Ops/Release for pool lifecycle; use TF apply mainly for LB/DB/DNS/tags.
 module "app_pool_green" {
   source = "../../modules/app_pool"
 

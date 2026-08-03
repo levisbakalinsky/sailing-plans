@@ -64,8 +64,8 @@ pnpm dev
 
 | Layer | Tool | Docs |
 | --- | --- | --- |
-| Infra (Droplet, firewall) | Terraform | [infra/terraform/README.md](infra/terraform/README.md) |
-| Apps (API / web / proxy) | GitHub Actions | [docs/deploy-droplet.md](docs/deploy-droplet.md) |
+| Infra (autoscale pools, LB, Postgres, Valkey, DNS) | Terraform | [infra/terraform/README.md](infra/terraform/README.md) |
+| Migrate / deploy / release / ops | GitHub Actions | [docs/deploy-droplet.md](docs/deploy-droplet.md) |
 
 ## Linear
 

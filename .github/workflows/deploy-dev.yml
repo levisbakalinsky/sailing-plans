@@ -146,43 +146,20 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          for req in LOADBALANCER_ID AUTOSCALE_POOL_ID_BLUE AUTOSCALE_POOL_ID_GREEN; do
-            if [[ -z "${!req}" ]]; then
-              echo "$req must be set (GitHub Actions variable). Apply Terraform blue/green first." >&2
-              exit 1
-            fi
-          done
-          active="$(./deploy/scripts/lb-get-tag.sh)"
-          if [[ -z "$active" ]]; then
-            echo "LB has no droplet_tag; defaulting to blue" >&2
-            active="$BLUE_TAG"
-          fi
-          # During the first blue/green cutover the LB may still use the shared pool tag.
-          if [[ "$active" == "$POOL_TAG" ]]; then
-            echo "LB still on shared pool tag; treating as blue" >&2
-            active="$BLUE_TAG"
-          fi
-          if [[ "$active" == "$BLUE_TAG" ]]; then
-            inactive="$GREEN_TAG"
-            inactive_pool="$AUTOSCALE_POOL_ID_GREEN"
-            active_pool="$AUTOSCALE_POOL_ID_BLUE"
-            inactive_name="sailing-plans-app-dev-green"
-          elif [[ "$active" == "$GREEN_TAG" ]]; then
-            inactive="$BLUE_TAG"
-            inactive_pool="$AUTOSCALE_POOL_ID_BLUE"
-            active_pool="$AUTOSCALE_POOL_ID_GREEN"
-            inactive_name="sailing-plans-app-dev"
-          else
-            echo "Unexpected LB tag '$active' (expected $BLUE_TAG or $GREEN_TAG)" >&2
+          if [[ -z "${LOADBALANCER_ID}" ]]; then
+            echo "LOADBALANCER_ID must be set" >&2
             exit 1
           fi
-          echo "active_tag=$active" >> "$GITHUB_OUTPUT"
-          echo "inactive_tag=$inactive" >> "$GITHUB_OUTPUT"
-          echo "inactive_pool_id=$inactive_pool" >> "$GITHUB_OUTPUT"
-          echo "active_pool_id=$active_pool" >> "$GITHUB_OUTPUT"
-          echo "inactive_pool_name=$inactive_name" >> "$GITHUB_OUTPUT"
-          echo "baseline_min=$BASELINE_MIN" >> "$GITHUB_OUTPUT"
-          echo "Active=$active Inactive=$inactive"
+          ./deploy/scripts/resolve-colors.sh | tee /tmp/colors.env
+          # shellcheck disable=SC1091
+          set -a; source /tmp/colors.env; set +a
+          echo "active_tag=$active_tag" >> "$GITHUB_OUTPUT"
+          echo "inactive_tag=$inactive_tag" >> "$GITHUB_OUTPUT"
+          echo "inactive_pool_id=$inactive_pool_id" >> "$GITHUB_OUTPUT"
+          echo "active_pool_id=$active_pool_id" >> "$GITHUB_OUTPUT"
+          echo "inactive_pool_name=$inactive_pool_name" >> "$GITHUB_OUTPUT"
+          echo "baseline_min=$baseline_min" >> "$GITHUB_OUTPUT"
+          echo "Active=$active_tag Inactive=$inactive_tag"
 
   scale-inactive:
     needs: [changes, resolve-colors]
@@ -478,13 +455,13 @@ jobs:
           )"
 
   healthcheck-inactive:
-    needs: [resolve-colors, scale-inactive, deploy-api, deploy-web, deploy-proxy]
+    needs: [changes, resolve-colors, scale-inactive, deploy-api, deploy-web, deploy-proxy]
     if: |
       always()
       && needs.scale-inactive.result == 'success'
-      && (needs.deploy-api.result == 'success' || needs.deploy-api.result == 'skipped')
-      && (needs.deploy-web.result == 'success' || needs.deploy-web.result == 'skipped')
-      && (needs.deploy-proxy.result == 'success' || needs.deploy-proxy.result == 'skipped')
+      && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
+      && (needs.changes.outputs.web != 'true' || needs.deploy-web.result == 'success')
+      && (needs.changes.outputs.proxy != 'true' || needs.deploy-proxy.result == 'success')
     runs-on: ubuntu-latest
     environment: development
     steps:

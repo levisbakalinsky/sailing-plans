@@ -21,12 +21,15 @@ infra/terraform/
 
 | Concern | Tool |
 | --- | --- |
-| Blue/green autoscale pools, LB, Postgres, Valkey, firewalls, tags | Terraform |
+| LB, firewalls, tags, Postgres, Valkey, pool *definitions* | Terraform |
+| Day-to-day idle pool create/delete + LB cutovers | GitHub Actions (Deploy / Release / Ops) |
 | Cloudflare DNS (apex/www → LB) + SSL mode | Terraform (`cloudflare_dns`) |
 | `.net`/`.org` → `.com` 301 redirects | Cloudflare Single Redirects (dashboard) + Caddyfile backup |
-| DB migrations (`prisma migrate deploy`) | GitHub Actions (`Migrate Development`) — run **before** deploy |
-| Blue/green app deploy + LB tag cutover | GitHub Actions (`Deploy Development`) |
+| DB migrations | `Migrate Development` (before deploy when schema changes) |
+| App ship + release ledger | `Deploy Development` / `Release Development` |
 | New pool member bootstrap | cloud-init (`app_pool` user-data) |
+
+See also [`docs/deploy-droplet.md`](../../docs/deploy-droplet.md).
 
 ## Prerequisites
 
@@ -89,7 +92,7 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 | Setting | Default |
 | --- | --- |
 | Active color min / max | 2 / 4 |
-| Idle color | Deleted after cutover (DO cannot keep min = 0) |
+| Idle color | Kept by default after cutover; tear down via **Ops Development** |
 | Size | `s-2vcpu-4gb` |
 | CPU target | 0.7 |
 | Cooldown | 10 minutes |
@@ -97,9 +100,9 @@ Single Redirect rules (edge 301s) are configured in the Cloudflare dashboard (AP
 | Shared tag | `sailing-plans-app-dev-pool` (DB/Valkey/firewall) |
 | Color tags | `…-pool-blue`, `…-pool-green` |
 
-Deploy flow: ensure/scale inactive → deploy → health → flip LB tag → **delete** previous color pool.  
-A later `terraform apply` may recreate a deleted color pool; delete it again or `terraform state rm` that module if you want TF to stop managing it.  
-Migrations are a separate workflow (`Migrate Development`).
+**Ownership split:** Terraform defines both color pools + LB. CI scales/recreates/deletes the idle color around releases. A `terraform apply` after CI deleted a pool **will recreate it** — expected; use Ops for routine teardown.
+
+Do **not** use Terraform’s optional `bootstrap_lb_blue` after green (or any non-blue color) is live.
 
 ## Managed Postgres (dev)
 

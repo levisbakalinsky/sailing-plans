@@ -17,7 +17,8 @@ on:
       - ".github/workflows/migrate-dev.yml"
 
 concurrency:
-  group: migrate-dev
+  # Serialize with deploy/release so migrate always wins the DB before cutover.
+  group: deploy-dev-pool
   cancel-in-progress: false
 
 env:
