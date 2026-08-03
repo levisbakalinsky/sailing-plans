@@ -34,6 +34,10 @@ Developers: [shipping.md](./shipping.md).
 3. Deploy to inactive color → healthcheck → flip LB (auto flip-back on failure)  
 4. Record release → delete previous color  
 
+**Bootstrap wait:** Inactive pool members clone from base Ubuntu; cloud-init + Docker often needs several minutes before `:80/health` is 200. `hosts=N healthy<M` during `scale-inactive` is usually still booting, not stuck.
+
+**Dual-tag orphans:** A droplet with both `-pool-blue` and `-pool-green` that is not a member of any remaining autoscale pool is destroyed on teardown (`autoscale-delete.sh`) and again when ensuring the inactive pool. Live dual-tagged hosts (still pool members) are never destroyed; the stale idle tag is stripped instead. Health waits count only autoscale pool members, so orphans cannot satisfy readiness.
+
 ## URLs
 
 - https://www.sailingplans.com/

@@ -315,7 +315,9 @@ jobs:
           echo "$out"
           new_id="$(sed -n 's/^pool_id=//p' <<<"$out" | tail -n1)"
           echo "inactive_pool_id=$new_id" >> "$GITHUB_OUTPUT"
-          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900
+          # Scope wait to pool members so dual-tag orphans cannot satisfy health.
+          # New Ubuntu clones often need several minutes of cloud-init/Docker.
+          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900 "$new_id"
 
   deploy-api:
     needs: [changes, resolve-colors, scale-inactive, build-api]
@@ -521,10 +523,11 @@ jobs:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
           MIN: ${{ needs.resolve-colors.outputs.baseline_min }}
+          INACTIVE_POOL_ID: ${{ needs.scale-inactive.outputs.inactive_pool_id }}
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 300
+          ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 300 "$INACTIVE_POOL_ID"
 
   cutover:
     needs: [resolve-colors, healthcheck-inactive]

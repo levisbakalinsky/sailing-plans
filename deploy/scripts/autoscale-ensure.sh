@@ -51,6 +51,7 @@ fi
 if [[ "$exists" != "true" ]]; then
   echo "Creating pool ${POOL_NAME} by cloning ${CLONE_FROM}" >&2
   source_json="$(api GET "/droplets/autoscale/${CLONE_FROM}")"
+  # Strip every color tag before adding the new one — never ship dual-tagged templates.
   create_payload="$(jq -c --arg name "$POOL_NAME" --arg color "$COLOR_TAG" --arg shared "$SHARED_TAG" --argjson min "$MIN" '
     .autoscale_pool as $p
     | ($p.droplet_template.tags // []) as $tags
@@ -70,6 +71,7 @@ if [[ "$exists" != "true" ]]; then
         )
       }
   ' <<<"$source_json")"
+  echo "clone tags -> $(jq -rc '.droplet_template.tags' <<<"$create_payload")" >&2
   created="$(api POST "/droplets/autoscale" -d "$create_payload")"
   POOL_ID="$(jq -r '.autoscale_pool.id // empty' <<<"$created")"
   if [[ -z "$POOL_ID" ]]; then
@@ -78,6 +80,59 @@ if [[ "$exists" != "true" ]]; then
     exit 1
   fi
   echo "Created pool ${POOL_NAME} id=${POOL_ID}" >&2
+fi
+
+# Destroy dual-tagged leftovers for this color that are not members of this pool
+# or the clone source (live) pool. Fail closed if live-pool membership cannot be listed.
+member_file="$(mktemp)"
+trap 'rm -f "$member_file"' EXIT
+: >"$member_file"
+live_members_ok=false
+for pid in "$CLONE_FROM" "$POOL_ID"; do
+  [[ -n "$pid" ]] || continue
+  page=1
+  pool_listed=false
+  while true; do
+    code="$(curl -sS -o /tmp/autoscale-members.json -w '%{http_code}' \
+      -H "Authorization: Bearer ${TOKEN}" \
+      "https://api.digitalocean.com/v2/droplets/autoscale/${pid}/members?page=${page}&per_page=200" || true)"
+    if [[ "$code" != "200" ]]; then
+      echo "warning: members list failed for pool ${pid} (http=${code})" >&2
+      pool_listed=false
+      break
+    fi
+    pool_listed=true
+    jq -r '.droplets[]?.droplet_id // empty' /tmp/autoscale-members.json >>"$member_file"
+    pages="$(jq -r '.meta.pagination.pages // 1' /tmp/autoscale-members.json)"
+    if [[ "$page" -ge "$pages" ]]; then
+      break
+    fi
+    page=$((page + 1))
+  done
+  if [[ "$pid" == "$CLONE_FROM" && "$pool_listed" == "true" ]]; then
+    live_members_ok=true
+  fi
+done
+
+if [[ "$live_members_ok" != "true" ]]; then
+  echo "warning: skipping dual-tag orphan GC; could not list live pool members" >&2
+else
+  while IFS=$'\t' read -r id name tags; do
+    [[ -n "$id" ]] || continue
+    case "$tags" in
+      *-pool-blue*-pool-green*|*-pool-green*-pool-blue*) ;;
+      *) continue ;;
+    esac
+    if grep -qx "$id" "$member_file"; then
+      continue
+    fi
+    dcode="$(curl -sS -o /dev/null -w '%{http_code}' -X DELETE \
+      -H "Authorization: Bearer ${TOKEN}" \
+      "https://api.digitalocean.com/v2/droplets/${id}")"
+    echo "destroyed dual-tag orphan ${id} (${name}) before scale http=${dcode}" >&2
+  done < <(curl -fsS -H "Authorization: Bearer ${TOKEN}" \
+    "https://api.digitalocean.com/v2/droplets?tag_name=$(printf %s "$COLOR_TAG" | jq -sRr @uri)&per_page=200" \
+    | jq -r '.droplets[]? | "\(.id)\t\(.name)\t\((.tags // []) | join(","))"')
 fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
