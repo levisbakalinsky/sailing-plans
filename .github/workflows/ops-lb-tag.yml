@@ -1,0 +1,50 @@
+name: Ops LB Tag
+
+# Emergency / ops helper to point the Load Balancer at a droplet tag.
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Droplet tag for the LB (e.g. sailing-plans-app-dev-pool-blue or shared pool tag)
+        required: true
+        type: string
+        default: sailing-plans-app-dev-pool-blue
+
+concurrency:
+  group: ops-lb-tag
+  cancel-in-progress: false
+
+jobs:
+  set-tag:
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Set LB droplet_tag
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          LOADBALANCER_ID: ${{ vars.LOADBALANCER_ID }}
+          TAG: ${{ github.event.inputs.tag }}
+          LB_HOST: ${{ secrets.LOADBALANCER_IP }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          ./deploy/scripts/lb-set-tag.sh "$TAG"
+          for i in $(seq 1 36); do
+            code="$(curl -sS -o /dev/null -w '%{http_code}' "http://${LB_HOST}/health" || true)"
+            echo "health http=$code"
+            if [[ "$code" == "200" ]]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "LB still unhealthy after tag set" >&2
+          exit 1
