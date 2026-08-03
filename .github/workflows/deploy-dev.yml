@@ -28,11 +28,11 @@ on:
           - web
           - proxy
       finalize:
-        description: After cutover, delete the old color pool (droplets gone)
+        description: After cutover, delete the old color (disables instant rollback)
         type: boolean
-        default: true
+        default: false
       skip_cutover:
-        description: Deploy to inactive color only (no LB flip)
+        description: Deploy to inactive color only (no LB flip) — then use Release Development → forward
         type: boolean
         default: false
 
@@ -551,12 +551,100 @@ jobs:
           gh variable set ACTIVE_COLOR_TAG --env development --body "$INACTIVE_TAG" || \
             echo "Could not update ACTIVE_COLOR_TAG (non-fatal); migrate will read LB tag."
 
+  record-release:
+    needs: [resolve-colors, healthcheck-inactive, build-api, build-web, cutover]
+    if: |
+      always()
+      && needs.healthcheck-inactive.result == 'success'
+    runs-on: ubuntu-latest
+    environment: development
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy/scripts
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Write release.json for rollback/forward
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          ACTIVE_TAG: ${{ needs.resolve-colors.outputs.active_tag }}
+          INACTIVE_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+          API_IMAGE_BUILT: ${{ needs.build-api.outputs.image }}
+          WEB_IMAGE_BUILT: ${{ needs.build-web.outputs.image }}
+          GIT_SHA: ${{ github.sha }}
+          CUTOVER_RESULT: ${{ needs.cutover.result }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+
+          # Prefer built images; fall back to whatever is on the inactive hosts.
+          export POOL_TAG="$INACTIVE_TAG"
+          host_env="$(./deploy/scripts/ssh-pool.sh --first-only -- \
+            'cd /opt/sailing-plans && grep -E "^(API_IMAGE|WEB_IMAGE)=" .env || true' || true)"
+          api_image="${API_IMAGE_BUILT:-}"
+          web_image="${WEB_IMAGE_BUILT:-}"
+          if [[ -z "$api_image" ]]; then
+            api_image="$(grep -E '^API_IMAGE=' <<<"$host_env" | head -n1 | cut -d= -f2- || true)"
+          fi
+          if [[ -z "$web_image" ]]; then
+            web_image="$(grep -E '^WEB_IMAGE=' <<<"$host_env" | head -n1 | cut -d= -f2- || true)"
+          fi
+
+          export POOL_TAG="$ACTIVE_TAG"
+          prev_state="$(./deploy/scripts/release-state.sh get || echo '{}')"
+          pending="$(jq -nc \
+            --arg api "$api_image" \
+            --arg web "$web_image" \
+            --arg sha "$GIT_SHA" \
+            --arg color "$INACTIVE_TAG" \
+            '{api_image:$api, web_image:$web, git_sha:$sha, color:$color, deployed_at:(now|todate)}')"
+
+          if [[ "$CUTOVER_RESULT" == "success" ]]; then
+            # Cut over: new active = inactive color; previous = former active release.
+            new_state="$(jq -c --argjson pending "$pending" --arg active "$INACTIVE_TAG" --arg prev "$ACTIVE_TAG" '
+              {
+                active_color: $active,
+                previous_color: $prev,
+                active: $pending,
+                previous: (.active // {}),
+                pending: null,
+                updated_at: (now | todate),
+                last_action: "deploy-cutover"
+              }
+            ' <<<"$prev_state")"
+            export POOL_TAG="$INACTIVE_TAG"
+          else
+            # skip_cutover (or cutover skipped): park build as pending for Release → forward.
+            new_state="$(jq -c --argjson pending "$pending" --arg active "$ACTIVE_TAG" '
+              .active_color = $active
+              | .pending = $pending
+              | .updated_at = (now | todate)
+              | .last_action = "deploy-pending"
+            ' <<<"$prev_state")"
+            export POOL_TAG="$ACTIVE_TAG"
+          fi
+
+          tmp="$(mktemp)"
+          echo "$new_state" | jq . | tee "$tmp"
+          ./deploy/scripts/release-state.sh put "$tmp"
+          # Also persist onto the inactive fleet so either color can serve state.
+          export POOL_TAG="$INACTIVE_TAG"
+          ./deploy/scripts/release-state.sh put "$tmp" || true
+          rm -f "$tmp"
+
   finalize:
-    needs: [resolve-colors, cutover]
+    needs: [resolve-colors, cutover, record-release]
     if: |
       always()
       && needs.cutover.result == 'success'
-      && (github.event_name != 'workflow_dispatch' || github.event.inputs.finalize != 'false')
+      && github.event_name == 'workflow_dispatch'
+      && github.event.inputs.finalize == 'true'
     runs-on: ubuntu-latest
     environment: development
     steps:
@@ -578,7 +666,5 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          # DO cannot scale a pool to 0; delete the old color so we return to baseline (2).
-          # Next deploy recreates it via autoscale-ensure.sh.
-          # KEEP_TAG is the newly active color (inactive before cutover).
+          # Optional: drops instant rollback. Prefer Release Development → teardown-idle.
           ./deploy/scripts/autoscale-delete.sh "$POOL_ID" "$OLD_TAG" "$KEEP_TAG"
