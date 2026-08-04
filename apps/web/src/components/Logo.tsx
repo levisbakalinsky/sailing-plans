@@ -4,9 +4,10 @@ type LogoProps = {
 };
 
 /**
- * Course compass mark from Figma (Sailing Plans Brand).
- * Geometric four-point rose + north waypoint — original SP glyph.
- * File: https://www.figma.com/design/SrvntpWbmYhhH7ysAKby3g
+ * Wake Arc mark from Figma (Sailing Plans Brand).
+ * Bold open ring with gap on the right + modular wake pixels — original SP glyph
+ * in the same structural language as cloud-infra marks (ring + pixels), not a copy.
+ * File: https://www.figma.com/design/Fhl2D2OvJqld81HK3nZkOL
  */
 export function LogoMark({ className, title }: LogoProps) {
   return (
@@ -20,11 +21,10 @@ export function LogoMark({ className, title }: LogoProps) {
       aria-label={title}
     >
       <g fill="currentColor">
-        <path d="M32 16 39.5 30.8 34.8 34H29.2L24.5 30.8 32 16Z" />
-        <path d="M52 36 38.2 28.5 35 33.2V38.8L38.2 43.5 52 36Z" />
-        <path d="M32 56.5 24.5 41.2 29.2 38H34.8L39.5 41.2 32 56.5Z" />
-        <path d="M12 36 25.8 28.5 29 33.2V38.8L25.8 43.5 12 36Z" />
-        <circle cx="32" cy="11.5" r="5.25" />
+        <path d="M37.2 6.35A26.5 26.5 0 1 0 55.65 40.8L45.4 36.5A15.2 15.2 0 1 1 34.85 14.55Z" />
+        <rect x="43.2" y="28.5" width="12" height="12" />
+        <rect x="50.5" y="43" width="8" height="8" />
+        <rect x="54" y="23.5" width="5.5" height="5.5" />
       </g>
     </svg>
   );
