@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LegalPage } from '../../components/LegalPage';
+import {
+  COMPANY_NAME,
+  MAILING_ADDRESS_LINES,
+  PRIVACY_EMAIL,
+} from '../../lib/company';
 
 export const metadata: Metadata = {
   title: 'Privacy Policy · Sailing Plans',
@@ -9,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = 'August 4, 2026';
-const CONTACT = 'hello@sailingplans.com';
+const CONTACT = PRIVACY_EMAIL;
 
 export default function PrivacyPage() {
   return (
@@ -34,8 +39,14 @@ export default function PrivacyPage() {
         information) is:
       </p>
       <p>
-        Avena Services, LLC
+        {COMPANY_NAME}
         <br />
+        {MAILING_ADDRESS_LINES.map((line) => (
+          <span key={line}>
+            {line}
+            <br />
+          </span>
+        ))}
         Product: Sailing Plans
         <br />
         Email:{' '}
@@ -260,7 +271,14 @@ export default function PrivacyPage() {
         Questions or privacy requests:{' '}
         <a href={`mailto:${CONTACT}`}>{CONTACT}</a>
         <br />
-        Avena Services, LLC — Sailing Plans
+        {COMPANY_NAME} — Sailing Plans
+        <br />
+        {MAILING_ADDRESS_LINES.map((line) => (
+          <span key={line}>
+            {line}
+            <br />
+          </span>
+        ))}
       </p>
     </LegalPage>
   );

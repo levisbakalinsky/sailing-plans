@@ -2,6 +2,11 @@
 
 import Link from 'next/link';
 import { Show, SignInButton, SignUpButton } from '@clerk/nextjs';
+import {
+  COMPANY_NAME,
+  MAILING_ADDRESS_LINES,
+  SALES_EMAIL,
+} from '../lib/company';
 import { LogoMark } from './Logo';
 
 const YEAR = new Date().getFullYear();
@@ -75,13 +80,20 @@ export function SiteFooter() {
             <h2 className="site-footer-heading">Company</h2>
             <ul className="site-footer-list">
               <li>
-                <span className="site-footer-muted">Avena Services, LLC</span>
+                <span className="site-footer-muted">{COMPANY_NAME}</span>
               </li>
               <li>
-                <a href="mailto:hello@sailingplans.com">Contact</a>
+                <address className="site-footer-address">
+                  {MAILING_ADDRESS_LINES.map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                </address>
               </li>
               <li>
-                <a href="mailto:hello@sailingplans.com?subject=Waitlist">
+                <a href={`mailto:${SALES_EMAIL}`}>Contact</a>
+              </li>
+              <li>
+                <a href={`mailto:${SALES_EMAIL}?subject=Waitlist`}>
                   Waitlist
                 </a>
               </li>
@@ -103,7 +115,7 @@ export function SiteFooter() {
         <div className="site-footer-bottom">
           <div className="site-footer-copy">
             <LogoMark className="site-footer-copy-mark" />
-            <span>© {YEAR} Avena Services, LLC</span>
+            <span>© {YEAR} {COMPANY_NAME}</span>
           </div>
         </div>
       </div>

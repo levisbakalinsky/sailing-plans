@@ -1234,6 +1234,17 @@ a.dashboard-cta-ghost:hover {
   line-height: 1.35;
 }
 
+.site-footer-address {
+  margin: 0;
+  font-style: normal;
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 0.88rem;
+  line-height: 1.45;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
 .site-footer-bottom {
   display: flex;
   flex-wrap: wrap;

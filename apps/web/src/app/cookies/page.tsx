@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LegalPage } from '../../components/LegalPage';
+import {
+  COMPANY_NAME,
+  MAILING_ADDRESS_LINES,
+  PRIVACY_EMAIL,
+} from '../../lib/company';
 
 export const metadata: Metadata = {
   title: 'Cookie Notice · Sailing Plans',
@@ -9,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = 'August 4, 2026';
-const CONTACT = 'hello@sailingplans.com';
+const CONTACT = PRIVACY_EMAIL;
 
 export default function CookiesPage() {
   return (
@@ -96,6 +101,16 @@ export default function CookiesPage() {
         see the <Link href="/privacy">Privacy Policy</Link> and{' '}
         <Link href="/terms">Terms of Service</Link>. Questions:{' '}
         <a href={`mailto:${CONTACT}?subject=Cookie%20notice`}>{CONTACT}</a>.
+      </p>
+      <p>
+        {COMPANY_NAME}
+        <br />
+        {MAILING_ADDRESS_LINES.map((line) => (
+          <span key={line}>
+            {line}
+            <br />
+          </span>
+        ))}
       </p>
     </LegalPage>
   );
