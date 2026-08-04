@@ -23,7 +23,7 @@ const mono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: 'Sailing Plans',
-  description: 'Plans that hold when the day gets loud.',
+  description: 'Sailing Plans. Coming soon.',
   icons: {
     icon: [{ url: '/brand/mark.svg', type: 'image/svg+xml' }],
     apple: [{ url: '/brand/mark.svg' }],
