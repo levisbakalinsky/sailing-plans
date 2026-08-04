@@ -11,12 +11,7 @@ import {
 import { clerkUserButtonAppearance } from '../lib/clerkAppearance';
 import { LogoMark } from './Logo';
 
-const NAV = [
-  { href: '#product', label: 'Product' },
-  { href: '#company', label: 'Company' },
-] as const;
-
-/** DigitalOcean-style solid black marketing chrome — real destinations only. */
+/** DigitalOcean-style solid black marketing chrome — brand left, auth right. */
 export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const menuId = useId();
@@ -37,14 +32,6 @@ export function SiteHeader() {
           <LogoMark className="site-header-mark" title="Sailing Plans" />
           <span className="site-header-word">Sailing Plans</span>
         </Link>
-
-        <nav className="site-header-nav" aria-label="Primary">
-          {NAV.map((item) => (
-            <a key={item.href} href={item.href}>
-              {item.label}
-            </a>
-          ))}
-        </nav>
 
         <div className="site-header-actions">
           <Show when="signed-out">
@@ -89,17 +76,6 @@ export function SiteHeader() {
 
       {open ? (
         <div className="site-header-drawer" id={menuId}>
-          <nav className="site-header-drawer-nav" aria-label="Mobile">
-            {NAV.map((item) => (
-              <a
-                key={item.href}
-                href={item.href}
-                onClick={() => setOpen(false)}
-              >
-                {item.label}
-              </a>
-            ))}
-          </nav>
           <div className="site-header-drawer-actions">
             <Show when="signed-out">
               <SignInButton mode="redirect" forceRedirectUrl="/dashboard">
