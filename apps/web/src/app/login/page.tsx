@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { SignIn } from '@clerk/nextjs';
 import { LogoMark } from '../../components/Logo';
 
 export default function LoginPage() {
@@ -13,27 +14,28 @@ export default function LoginPage() {
           <div className="hero-grain" />
         </div>
 
-        <div className="hero-copy">
+        <div className="hero-copy hero-copy-auth">
           <div className="hero-brand-row">
             <LogoMark className="hero-mark" title="Sailing Plans" />
             <p className="eyebrow">Log in</p>
           </div>
-          <h1 className="brand brand-compact">Not open yet</h1>
-          <p className="headline">
-            Sign-in will be here when we launch. Join the waitlist for first
-            word.
-          </p>
-          <div className="cta-row">
-            <a
-              className="cta"
-              href="mailto:hello@sailingplans.com?subject=Waitlist"
-            >
-              Join the waitlist
-            </a>
-            <Link className="cta cta-secondary" href="/">
-              Back home
-            </Link>
+          <div className="clerk-frame">
+            <SignIn
+              routing="hash"
+              fallbackRedirectUrl="/"
+              signUpUrl="/login"
+              appearance={{
+                variables: {
+                  colorPrimary: '#71e5f2',
+                  colorBackground: '#0c1f1e',
+                  borderRadius: '2px',
+                },
+              }}
+            />
           </div>
+          <p className="auth-back">
+            <Link href="/">Back home</Link>
+          </p>
         </div>
 
         <footer className="site-footer">

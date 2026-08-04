@@ -1,4 +1,5 @@
 import { LogoMark } from '../components/Logo';
+import { AuthCta } from '../components/AuthCta';
 
 export default function HomePage() {
   return (
@@ -30,9 +31,7 @@ export default function HomePage() {
             >
               Join the waitlist
             </a>
-            <a className="cta cta-secondary" href="/login">
-              Log in
-            </a>
+            <AuthCta />
           </div>
         </div>
 

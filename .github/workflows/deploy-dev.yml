@@ -243,6 +243,7 @@ jobs:
       && needs.await-ci.result == 'success'
       && needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    environment: development
     permissions:
       contents: read
       packages: write
@@ -268,6 +269,9 @@ jobs:
           push: true
           build-args: |
             NEXT_PUBLIC_API_URL=/api
+            NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${{ secrets.CLERK_PUBLISHABLE_KEY }}
+            NEXT_PUBLIC_CLERK_SIGN_IN_URL=/login
+            NEXT_PUBLIC_CLERK_SIGN_UP_URL=/login
           tags: |
             ${{ steps.meta.outputs.image }}
             ${{ steps.meta.outputs.latest }}
@@ -349,6 +353,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           API_IMAGE: ${{ needs.build-api.outputs.image }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
           POOL_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
           set -euo pipefail
@@ -357,8 +363,14 @@ jobs:
           set -euo pipefail
           cd /opt/sailing-plans
           echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          grep -vE '^API_IMAGE=' .env > .env.tmp || true
-          { cat .env.tmp; echo "API_IMAGE=${API_IMAGE}"; } > .env
+          grep -vE '^(API_IMAGE|CLERK_SECRET_KEY|CLERK_PUBLISHABLE_KEY|NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)=' .env > .env.tmp || true
+          {
+            cat .env.tmp
+            echo "API_IMAGE=${API_IMAGE}"
+            echo "CLERK_SECRET_KEY=${CLERK_SECRET_KEY}"
+            echo "CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}"
+            echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}"
+          } > .env
           rm -f .env.tmp
           chmod 600 .env
           docker compose pull api
@@ -406,6 +418,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_ACTOR: ${{ github.actor }}
           WEB_IMAGE: ${{ needs.build-web.outputs.image }}
+          CLERK_SECRET_KEY: ${{ secrets.CLERK_SECRET_KEY }}
+          CLERK_PUBLISHABLE_KEY: ${{ secrets.CLERK_PUBLISHABLE_KEY }}
           POOL_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
         run: |
           set -euo pipefail
@@ -414,8 +428,14 @@ jobs:
           set -euo pipefail
           cd /opt/sailing-plans
           echo "${GITHUB_TOKEN}" | docker login ghcr.io -u "${GITHUB_ACTOR}" --password-stdin
-          grep -vE '^WEB_IMAGE=' .env > .env.tmp || true
-          { cat .env.tmp; echo "WEB_IMAGE=${WEB_IMAGE}"; } > .env
+          grep -vE '^(WEB_IMAGE|CLERK_SECRET_KEY|CLERK_PUBLISHABLE_KEY|NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY)=' .env > .env.tmp || true
+          {
+            cat .env.tmp
+            echo "WEB_IMAGE=${WEB_IMAGE}"
+            echo "CLERK_SECRET_KEY=${CLERK_SECRET_KEY}"
+            echo "CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}"
+            echo "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=${CLERK_PUBLISHABLE_KEY}"
+          } > .env
           rm -f .env.tmp
           chmod 600 .env
           docker compose pull web

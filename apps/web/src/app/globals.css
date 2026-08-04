@@ -238,6 +238,42 @@ a {
   outline-offset: 3px;
 }
 
+.hero-copy-auth {
+  width: min(28rem, 100%);
+}
+
+.clerk-frame {
+  margin: 0.25rem 0 1rem;
+  animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+.clerk-frame .cl-rootBox,
+.clerk-frame .cl-card {
+  margin: 0;
+}
+
+.auth-back {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--ink-muted);
+  animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.2s both;
+}
+
+.auth-back a {
+  color: var(--foam);
+  border-bottom: 1px solid rgba(113, 229, 242, 0.35);
+}
+
+.auth-back a:hover {
+  border-color: rgba(154, 239, 247, 0.8);
+}
+
+.auth-user {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.85rem;
+}
+
 .site-footer {
   position: relative;
   z-index: 1;

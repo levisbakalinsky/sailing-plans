@@ -14,3 +14,21 @@ describe('GET /health', () => {
     expect(typeof body.timestamp).toBe('string');
   });
 });
+
+describe('GET /me', () => {
+  it('rejects unauthenticated requests', async () => {
+    // Clerk validates publishable key shape (base64 frontend API + '$').
+    process.env.CLERK_PUBLISHABLE_KEY =
+      'pk_test_' +
+      Buffer.from('helpful-fox-12.clerk.accounts.dev$')
+        .toString('base64')
+        .replace(/=+$/, '');
+    process.env.CLERK_SECRET_KEY = 'sk_test_' + 'x'.repeat(32);
+
+    const app = createApp();
+    const response = await app.request('/me');
+
+    expect(response.status).toBe(401);
+    await expect(response.json()).resolves.toEqual({ error: 'Unauthorized' });
+  });
+});
