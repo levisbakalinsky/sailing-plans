@@ -2,10 +2,12 @@ import { Atmosphere } from '../components/Atmosphere';
 import { AuthCta } from '../components/AuthCta';
 import { LogoMark } from '../components/Logo';
 import { SiteFooter } from '../components/SiteFooter';
+import { SiteHeader } from '../components/SiteHeader';
 
 export default function HomePage() {
   return (
     <main className="shell shell-scroll">
+      <SiteHeader />
       <section className="hero" aria-label="Sailing Plans">
         <Atmosphere variant="marketing" />
 
