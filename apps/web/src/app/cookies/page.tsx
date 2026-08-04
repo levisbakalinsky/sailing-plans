@@ -10,7 +10,7 @@ import {
 export const metadata: Metadata = {
   title: 'Cookie Notice · Sailing Plans',
   description:
-    'How Sailing Plans uses cookies and similar technologies, including Clerk authentication cookies.',
+    'How Sailing Plans uses cookies and similar technologies for authentication and security.',
 };
 
 const UPDATED = 'August 4, 2026';
@@ -39,8 +39,8 @@ export default function CookiesPage() {
       <h2>2. How we use cookies</h2>
       <p>
         Today, Sailing Plans uses cookies primarily for{' '}
-        <strong>authentication and security</strong> through our identity
-        provider, <strong>Clerk</strong>. These cookies are needed to:
+        <strong>authentication and security</strong> through our authentication
+        provider. These cookies are needed to:
       </p>
       <ul>
         <li>Keep you signed in across pages and sessions</li>
@@ -49,10 +49,10 @@ export default function CookiesPage() {
       </ul>
       <p>
         We do not currently set third-party advertising cookies or product
-        analytics cookies on the marketing site. Infrastructure providers such
-        as Cloudflare may process technical requests at the network edge as
-        part of delivering and securing the site; that processing is described
-        further in the Privacy Policy.
+        analytics cookies on the marketing site. Content delivery and security
+        providers may process technical requests at the network edge as part of
+        delivering and securing the site; that processing is described further
+        in the Privacy Policy.
       </p>
 
       <h2>3. Categories we use</h2>
@@ -91,8 +91,9 @@ export default function CookiesPage() {
       <p>
         Session cookies typically expire when you close your browser or after a
         short period defined by the authentication provider. Persistent cookies
-        (if any) remain until they expire or you delete them. Clerk’s session
-        lifetimes follow its configuration for our application.
+        (if any) remain until they expire or you delete them. Session lifetimes
+        follow the configuration of our authentication provider for this
+        application.
       </p>
 
       <h2>6. More information</h2>
