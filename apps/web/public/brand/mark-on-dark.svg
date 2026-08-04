@@ -1,9 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" role="img" aria-hidden="true">
-  <!-- Transparent Wake Arc for dark UI — from Figma Sailing Plans Wake Arc Mark -->
-  <g fill="#18C4D4" transform="translate(28 28) scale(3.125)">
-    <path d="M37.2 6.35A26.5 26.5 0 1 0 55.65 40.8L45.4 36.5A15.2 15.2 0 1 1 34.85 14.55Z"/>
-    <rect x="43.2" y="28.5" width="12" height="12"/>
-    <rect x="50.5" y="43" width="8" height="8"/>
-    <rect x="54" y="23.5" width="5.5" height="5.5"/>
-  </g>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-hidden="true">
+  <!-- Transparent Sail mark for dark UI — Figma Make SailMark -->
+  <path
+    d="M 88 168 L 88 30 A 100 100 0 0 1 170 158"
+    stroke="#18C4D4"
+    stroke-width="20"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+  />
+  <path
+    d="M 50 162 Q 109 182 168 162"
+    stroke="#18C4D4"
+    stroke-width="20"
+    stroke-linecap="round"
+  />
 </svg>
