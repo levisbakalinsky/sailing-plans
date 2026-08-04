@@ -1,6 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { LegalPage } from '../../components/LegalPage';
+import {
+  COMPANY_NAME,
+  CONTACT_EMAIL,
+  MAILING_ADDRESS_LINES,
+} from '../../lib/company';
 
 export const metadata: Metadata = {
   title: 'Terms of Service · Sailing Plans',
@@ -9,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = 'August 4, 2026';
-const CONTACT = 'hello@sailingplans.com';
+const CONTACT = CONTACT_EMAIL;
 
 export default function TermsPage() {
   return (
@@ -144,11 +149,11 @@ export default function TermsPage() {
 
       <h2>12. Governing law</h2>
       <p>
-        These Terms are governed by the laws of the United States and the laws
-        of the state in which Avena Services, LLC is organized, without regard
-        to conflict-of-law rules. Courts in that jurisdiction will have
-        exclusive venue for disputes that are not resolved informally, except
-        where applicable consumer protection law requires otherwise.
+        These Terms are governed by the laws of the State of California and the
+        United States, without regard to conflict-of-law rules. Courts located
+        in Los Angeles County, California will have exclusive venue for
+        disputes that are not resolved informally, except where applicable
+        consumer protection law requires otherwise.
       </p>
 
       <h2>13. Changes to these Terms</h2>
@@ -164,7 +169,14 @@ export default function TermsPage() {
         Questions about these Terms:{' '}
         <a href={`mailto:${CONTACT}`}>{CONTACT}</a>
         <br />
-        Avena Services, LLC — Sailing Plans
+        {COMPANY_NAME} — Sailing Plans
+        <br />
+        {MAILING_ADDRESS_LINES.map((line) => (
+          <span key={line}>
+            {line}
+            <br />
+          </span>
+        ))}
       </p>
     </LegalPage>
   );
