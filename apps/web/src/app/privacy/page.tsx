@@ -63,8 +63,9 @@ export default function PrivacyPage() {
         <li>
           <strong>Account and identity data</strong> — name, email address,
           username, profile details, and authentication identifiers when you
-          create or sign in to an account. Authentication is provided by Clerk;
-          we receive account data needed to operate signed-in features.
+          create or sign in to an account. Sign-in is provided by an
+          authentication provider; we receive account data needed to operate
+          signed-in features.
         </li>
         <li>
           <strong>Communications</strong> — messages you send us, including
@@ -78,8 +79,8 @@ export default function PrivacyPage() {
         </li>
         <li>
           <strong>Cookies and similar technologies</strong> — session and
-          authentication cookies required for Clerk sign-in and account
-          security. See our <Link href="/cookies">Cookie Notice</Link>.
+          authentication cookies required for sign-in and account security. See
+          our <Link href="/cookies">Cookie Notice</Link>.
         </li>
       </ul>
       <p>
@@ -93,7 +94,7 @@ export default function PrivacyPage() {
         <li>Provide, maintain, and secure accounts and the Service</li>
         <li>Authenticate users and prevent abuse or fraud</li>
         <li>Respond to waitlist, support, and privacy requests</li>
-        <li>Operate hosting, CDN, and infrastructure for availability</li>
+        <li>Operate hosting, delivery, and infrastructure for availability</li>
         <li>Comply with law and enforce our Terms of Service</li>
         <li>Improve the Service based on operational needs and feedback</li>
       </ul>
@@ -176,21 +177,26 @@ export default function PrivacyPage() {
 
       <h2>7. Processors and service providers</h2>
       <p>
-        We use trusted providers to help run the Service. They process personal
-        information on our instructions and for our purposes, including:
+        We use trusted service providers to help run the Service. They process
+        personal information on our instructions and for our purposes,
+        including categories such as:
       </p>
       <ul>
         <li>
-          <strong>Clerk</strong> — authentication, session management, and
-          account identity services
+          <strong>Authentication providers</strong> — sign-in, session
+          management, and account identity services
         </li>
         <li>
-          <strong>DigitalOcean</strong> — application hosting and managed
-          database infrastructure
+          <strong>Hosting providers</strong> — application hosting and managed
+          data storage
         </li>
         <li>
-          <strong>Cloudflare</strong> — DNS, CDN, and edge security for the
-          website
+          <strong>Content delivery and security providers</strong> — DNS, CDN,
+          and edge security for the website
+        </li>
+        <li>
+          <strong>Email services</strong> — delivering transactional or
+          waitlist-related messages when you contact us
         </li>
       </ul>
       <p>
@@ -242,12 +248,12 @@ export default function PrivacyPage() {
       <h2>11. Security</h2>
       <p>
         We use reasonable administrative, technical, and organizational
-        measures appropriate to the nature of the Service (including HTTPS,
-        access controls, and authenticated APIs). No method of transmission or
-        storage is perfectly secure. If we become aware of a breach that
-        requires notification under applicable law (including Canadian breach
-        reporting rules where they apply), we will notify affected individuals
-        and authorities as required.
+        measures appropriate to the nature of the Service (including encrypted
+        transport, access controls, and authenticated APIs). No method of
+        transmission or storage is perfectly secure. If we become aware of a
+        breach that requires notification under applicable law (including
+        Canadian breach reporting rules where they apply), we will notify
+        affected individuals and authorities as required.
       </p>
 
       <h2>12. Children</h2>

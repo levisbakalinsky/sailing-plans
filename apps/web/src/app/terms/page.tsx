@@ -5,6 +5,7 @@ import {
   COMPANY_NAME,
   LEGAL_EMAIL,
   MAILING_ADDRESS_LINES,
+  SALES_EMAIL,
 } from '../../lib/company';
 
 export const metadata: Metadata = {
@@ -42,8 +43,9 @@ export default function TermsPage() {
         You must be able to form a binding contract under applicable law to use
         the Service. You are responsible for the accuracy of information you
         provide and for keeping your login credentials secure. Account
-        authentication is handled by Clerk; activity under your account is your
-        responsibility unless you notify us of unauthorized access.
+        authentication is handled by an authentication provider; activity under
+        your account is your responsibility unless you notify us of
+        unauthorized access.
       </p>
       <p>
         We may suspend or terminate accounts that violate these Terms, create
@@ -82,7 +84,7 @@ export default function TermsPage() {
 
       <h2>5. Waitlist and communications</h2>
       <p>
-        If you join a waitlist or contact us at {CONTACT}, we may use your
+        If you join a waitlist or contact us at {SALES_EMAIL}, we may use your
         email to respond and to share product updates related to Sailing Plans.
         You can ask us to stop non-essential messages by emailing us. Our
         handling of personal information is described in the{' '}
@@ -91,10 +93,10 @@ export default function TermsPage() {
 
       <h2>6. Third-party services</h2>
       <p>
-        The Service relies on third parties such as Clerk (authentication),
-        DigitalOcean (hosting and databases), and Cloudflare (CDN and DNS).
-        Their terms and privacy practices apply to their processing. We are not
-        responsible for third-party services we do not control.
+        The Service relies on third-party service providers for functions such
+        as authentication, hosting, data storage, content delivery, security,
+        and email. Their terms and privacy practices apply to their processing.
+        We are not responsible for third-party services we do not control.
       </p>
 
       <h2>7. Intellectual property</h2>
