@@ -1,15 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Sailing Plans">
-  <!-- Course compass: geometric waypoint rose. Original Sailing Plans mark. -->
-  <rect width="64" height="64" rx="14" fill="#000f0f"/>
-  <g fill="#18c4d4">
-    <!-- North (elongated) + waypoint -->
-    <path d="M32 16 39.5 30.8 34.8 34 29.2 34 24.5 30.8Z"/>
-    <circle cx="32" cy="11.5" r="5.25"/>
-    <!-- East -->
-    <path d="M52 36 38.2 28.5 35 33.2 35 38.8 38.2 43.5Z"/>
-    <!-- South -->
-    <path d="M32 56.5 24.5 41.2 29.2 38 34.8 38 39.5 41.2Z"/>
-    <!-- West -->
-    <path d="M12 36 25.8 28.5 29 33.2 29 38.8 25.8 43.5Z"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Sailing Plans">
+  <!-- Course compass mark — exported from Figma: https://www.figma.com/design/SrvntpWbmYhhH7ysAKby3g -->
+  <rect width="256" height="256" rx="56" fill="#000F0F"/>
+  <g fill="#18C4D4">
+    <path d="M128 78L151.438 124.25L136.75 134.25H119.25L104.562 124.25L128 78Z"/>
+    <path d="M190.5 140.5L147.375 117.062L137.375 131.75V149.25L147.375 163.938L190.5 140.5Z"/>
+    <path d="M128 204.562L104.562 156.75L119.25 146.75H136.75L151.438 156.75L128 204.562Z"/>
+    <path d="M65.5 140.5L108.625 117.062L118.625 131.75V149.25L108.625 163.938L65.5 140.5Z"/>
+    <circle cx="128" cy="63.9375" r="16.4062"/>
   </g>
 </svg>
