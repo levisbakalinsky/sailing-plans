@@ -325,12 +325,13 @@ jobs:
           # New Ubuntu clones often need several minutes of cloud-init/Docker.
           ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900 "$new_id"
 
-  # Compose env mappings (e.g. web CLERK_SECRET_KEY) must land before app deploys.
+  # Always sync compose before app deploys so new/inactive hosts get env
+  # mappings (e.g. web CLERK_SECRET_KEY) even when only apps/web changed.
   sync-compose:
     needs: [changes, resolve-colors, scale-inactive]
     if: |
       always()
-      && needs.changes.outputs.proxy == 'true'
+      && needs.changes.outputs.proceed == 'true'
       && needs.scale-inactive.result == 'success'
     runs-on: ubuntu-latest
     environment: development
@@ -379,7 +380,7 @@ jobs:
       && needs.changes.outputs.api == 'true'
       && needs.build-api.result == 'success'
       && needs.scale-inactive.result == 'success'
-      && (needs.changes.outputs.proxy != 'true' || needs.sync-compose.result == 'success')
+      && needs.sync-compose.result == 'success'
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -444,8 +445,8 @@ jobs:
       && needs.changes.outputs.web == 'true'
       && needs.build-web.result == 'success'
       && needs.scale-inactive.result == 'success'
+      && needs.sync-compose.result == 'success'
       && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
-      && (needs.changes.outputs.proxy != 'true' || needs.sync-compose.result == 'success')
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -490,7 +491,7 @@ jobs:
           rm -f .env.tmp
           chmod 600 .env
           docker compose pull web
-          docker compose up -d --no-deps --remove-orphans web
+          docker compose up -d --no-deps --force-recreate --remove-orphans web
           for i in \$(seq 1 45); do
             code="\$(curl -sS -o /dev/null -w '%{http_code}' http://127.0.0.1/ || true)"
             if [[ "\$code" == "200" ]]; then
@@ -558,7 +559,7 @@ jobs:
     if: |
       always()
       && needs.scale-inactive.result == 'success'
-      && (needs.changes.outputs.proxy != 'true' || needs.sync-compose.result == 'success')
+      && needs.sync-compose.result == 'success'
       && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
       && (needs.changes.outputs.web != 'true' || needs.deploy-web.result == 'success')
       && (needs.changes.outputs.proxy != 'true' || needs.deploy-proxy.result == 'success')
