@@ -632,7 +632,8 @@ jobs:
 
           short="${GIT_SHA::12}"
           rid="$(date -u +%Y%m%dT%H%M%SZ)-${short}"
-          msg="$(printf '%s' "${RELEASE_MESSAGE:-}" | head -n1)"
+          # First line only — multi-line commit bodies break GHA env blocks.
+          msg="$(printf '%s' "${RELEASE_MESSAGE:-}" | head -n1 | tr -d '\r')"
 
           release="$(jq -nc \
             --arg id "$rid" \
@@ -671,7 +672,11 @@ jobs:
           tmp="$(mktemp)"
           echo "$host_state" | jq . | tee "$tmp"
           export POOL_TAG="$INACTIVE_TAG"
-          ./deploy/scripts/release-state.sh put "$tmp"
+          # Ledger is source of truth; do not block teardown if host scp fails
+          # (e.g. transient DO API 401 when resolving pool hosts).
+          if ! ./deploy/scripts/release-state.sh put "$tmp"; then
+            echo "Warning: could not write release.json to hosts; ledger is current" >&2
+          fi
           rm -f "$tmp"
           echo "Registered release $rid"
 
