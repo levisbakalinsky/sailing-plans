@@ -41,9 +41,9 @@ export function LogoMark({ className, title }: LogoProps) {
 
 export function LogoLockup({ className }: { className?: string }) {
   return (
-    <span className={className ?? 'logo-lockup'}>
-      <LogoMark className="logo-mark" title="Sailing Plans" />
-      <span className="logo-wordmark">Sailing Plans</span>
+    <span className={className ?? 'site-header-brand'}>
+      <LogoMark className="site-header-mark" title="Sailing Plans" />
+      <span className="site-header-word">Sailing Plans</span>
     </span>
   );
 }
