@@ -4,7 +4,7 @@ import { clerkAppearance } from '../../../lib/clerkAppearance';
 
 export default function SignUpPage() {
   return (
-    <AuthShell eyebrow="Sign up">
+    <AuthShell mode="sign-up">
       <SignUp
         routing="path"
         path="/sign-up"

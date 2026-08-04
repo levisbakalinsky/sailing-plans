@@ -1,7 +1,36 @@
 import Link from 'next/link';
 import { UserButton } from '@clerk/nextjs';
 import { auth, currentUser } from '@clerk/nextjs/server';
+import { Atmosphere } from '../../components/Atmosphere';
 import { LogoMark } from '../../components/Logo';
+
+function NavIconHome() {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+      <path
+        d="M3.5 8.5 10 3l6.5 5.5V16a1 1 0 0 1-1 1h-3.5v-4.5H8V17H4.5a1 1 0 0 1-1-1V8.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function NavIconPlans() {
+  return (
+    <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
+      <path
+        d="M4 5.5h12M4 10h12M4 14.5h8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
 
 export default async function DashboardPage() {
   await auth.protect();
@@ -13,58 +42,86 @@ export default async function DashboardPage() {
     'sailor';
 
   return (
-    <main className="dashboard">
-      <div className="dashboard-backdrop" aria-hidden="true">
-        <div className="dashboard-field" />
-        <div className="dashboard-pattern" />
-        <div className="dashboard-glow dashboard-glow-a" />
-        <div className="dashboard-glow dashboard-glow-b" />
-        <div className="dashboard-grain" />
-      </div>
-
-      <header className="dashboard-bar">
-        <Link
-          href="/dashboard"
-          className="dashboard-brand-link"
-          aria-label="Sailing Plans dashboard"
-        >
-          <LogoMark className="dashboard-bar-mark" title="Sailing Plans" />
-          <span className="dashboard-bar-word">Sailing Plans</span>
+    <div className="dashboard">
+      <aside className="dashboard-sidebar" aria-label="Dashboard navigation">
+        <Link href="/dashboard" className="dashboard-side-brand">
+          <LogoMark className="dashboard-side-mark" title="Sailing Plans" />
+          <span className="dashboard-side-word">Sailing Plans</span>
         </Link>
-        <UserButton
-          appearance={{
-            elements: {
-              avatarBox: { width: '2.25rem', height: '2.25rem' },
-            },
-          }}
-        />
-      </header>
 
-      <section className="dashboard-stage" aria-label="Dashboard home">
-        <p className="dashboard-eyebrow">Dashboard</p>
-        <h1 className="dashboard-brand">Sailing Plans</h1>
-        <p className="dashboard-welcome">Welcome back, {name}.</p>
-        <p className="dashboard-support">
-          Your berth is reserved. Plans will appear here when we leave the dock.
-        </p>
-
-        <div className="dashboard-actions">
-          <a
-            className="cta"
-            href="mailto:hello@sailingplans.com?subject=Early%20access"
-          >
-            Ask about early access
-          </a>
-          <Link className="cta cta-secondary" href="/">
-            View the site
+        <nav className="dashboard-nav">
+          <p className="dashboard-nav-label">Manage</p>
+          <Link href="/dashboard" className="dashboard-nav-item is-active">
+            <NavIconHome />
+            <span className="dashboard-nav-text">Home</span>
           </Link>
-        </div>
+          <span className="dashboard-nav-item is-disabled" aria-disabled="true">
+            <NavIconPlans />
+            <span className="dashboard-nav-text">Plans</span>
+            <span className="dashboard-nav-soon">Soon</span>
+          </span>
+        </nav>
+      </aside>
 
-        <p className="dashboard-status">
-          <span className="dashboard-status-dot" aria-hidden="true" />
-          Pre-launch · Account active
-        </p>
-      </section>
-    </main>
+      <div className="dashboard-main">
+        <header className="dashboard-topbar">
+          <div className="dashboard-search" aria-hidden="true">
+            <span className="dashboard-search-text">Search plans…</span>
+            <span className="dashboard-search-hint">⌘K</span>
+          </div>
+          <div className="dashboard-top-actions">
+            <a
+              className="dashboard-create"
+              href="mailto:hello@sailingplans.com?subject=Early%20access"
+            >
+              Create
+            </a>
+            <UserButton
+              appearance={{
+                elements: {
+                  avatarBox: { width: '2rem', height: '2rem' },
+                  userButtonPopoverCard: {
+                    background: '#12141c',
+                    border: '1px solid #2a2d3a',
+                    color: '#f4f5f5',
+                  },
+                  userButtonPopoverActionButton: { color: '#e8eaed' },
+                  userButtonPopoverActionButtonText: { color: '#e8eaed' },
+                  userButtonPopoverFooter: { display: 'none' },
+                },
+              }}
+            />
+          </div>
+        </header>
+
+        <section className="dashboard-canvas" aria-label="Dashboard home">
+          <Atmosphere variant="dashboard" />
+          <div className="dashboard-stage">
+            <p className="dashboard-eyebrow">Welcome aboard</p>
+            <h1 className="dashboard-brand">Sailing Plans</h1>
+            <p className="dashboard-welcome">Good to see you, {name}.</p>
+            <p className="dashboard-support">
+              Your berth is reserved. Plans will appear here when we leave the
+              dock.
+            </p>
+            <div className="dashboard-actions">
+              <a
+                className="dashboard-cta"
+                href="mailto:hello@sailingplans.com?subject=Early%20access"
+              >
+                Ask about early access
+              </a>
+              <Link className="dashboard-cta dashboard-cta-ghost" href="/">
+                View the site
+              </Link>
+            </div>
+            <p className="dashboard-status">
+              <span className="dashboard-status-dot" aria-hidden="true" />
+              Pre-launch · Account active
+            </p>
+          </div>
+        </section>
+      </div>
+    </div>
   );
 }

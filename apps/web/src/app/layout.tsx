@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { ClerkProvider } from '@clerk/nextjs';
-import { EB_Garamond, Source_Sans_3 } from 'next/font/google';
+import { EB_Garamond, IBM_Plex_Mono, Source_Sans_3 } from 'next/font/google';
 import { clerkAppearance } from '../lib/clerkAppearance';
 import './globals.css';
 
@@ -15,6 +15,12 @@ const body = Source_Sans_3({
   variable: '--font-body',
 });
 
+const mono = IBM_Plex_Mono({
+  subsets: ['latin'],
+  weight: ['400', '500'],
+  variable: '--font-mono',
+});
+
 export const metadata: Metadata = {
   title: 'Sailing Plans',
   description: 'Plans that hold when the day gets loud.',
@@ -22,7 +28,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${display.variable} ${body.variable}`}>
+    <html
+      lang="en"
+      className={`${display.variable} ${body.variable} ${mono.variable}`}
+    >
       <body>
         <ClerkProvider appearance={clerkAppearance} afterSignOutUrl="/">
           {children}
