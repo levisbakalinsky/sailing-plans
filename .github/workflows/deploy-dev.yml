@@ -323,13 +323,61 @@ jobs:
           # New Ubuntu clones often need several minutes of cloud-init/Docker.
           ./deploy/scripts/wait-pool-hosts.sh "$INACTIVE_TAG" "$MIN" 900 "$new_id"
 
+  # Compose env mappings (e.g. web CLERK_SECRET_KEY) must land before app deploys.
+  sync-compose:
+    needs: [changes, resolve-colors, scale-inactive]
+    if: |
+      always()
+      && needs.changes.outputs.proxy == 'true'
+      && needs.scale-inactive.result == 'success'
+    runs-on: ubuntu-latest
+    environment: development
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: |
+            deploy
+          sparse-checkout-cone-mode: true
+
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Sync compose + Caddyfile to inactive color
+        env:
+          DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
+          DROPLET_USER: ${{ secrets.DROPLET_USER }}
+          DROPLET_SSH_KEY: ${{ secrets.DROPLET_SSH_KEY }}
+          POOL_TAG: ${{ needs.resolve-colors.outputs.inactive_tag }}
+        run: |
+          set -euo pipefail
+          chmod +x deploy/scripts/*.sh
+          KEY_PATH="$(mktemp)"
+          printf '%s\n' "$DROPLET_SSH_KEY" >"$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          mapfile -t HOSTS < <(./deploy/scripts/pool-hosts.sh)
+          if [[ "${#HOSTS[@]}" -eq 0 ]]; then
+            echo "No pool hosts for tag $POOL_TAG" >&2
+            exit 1
+          fi
+          for host in "${HOSTS[@]}"; do
+            echo "Syncing stack files to $host"
+            scp -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
+              -i "$KEY_PATH" \
+              deploy/docker-compose.yml deploy/Caddyfile \
+              "${DROPLET_USER}@${host}:/opt/sailing-plans/"
+          done
+          rm -f "$KEY_PATH"
+
   deploy-api:
-    needs: [changes, resolve-colors, scale-inactive, build-api]
+    needs: [changes, resolve-colors, scale-inactive, build-api, sync-compose]
     if: |
       always()
       && needs.changes.outputs.api == 'true'
       && needs.build-api.result == 'success'
       && needs.scale-inactive.result == 'success'
+      && (needs.changes.outputs.proxy != 'true' || needs.sync-compose.result == 'success')
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -388,13 +436,14 @@ jobs:
           )"
 
   deploy-web:
-    needs: [changes, resolve-colors, scale-inactive, build-web, deploy-api, build-api]
+    needs: [changes, resolve-colors, scale-inactive, build-web, deploy-api, build-api, sync-compose]
     if: |
       always()
       && needs.changes.outputs.web == 'true'
       && needs.build-web.result == 'success'
       && needs.scale-inactive.result == 'success'
       && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
+      && (needs.changes.outputs.proxy != 'true' || needs.sync-compose.result == 'success')
     runs-on: ubuntu-latest
     environment: development
     permissions:
@@ -454,11 +503,12 @@ jobs:
           )"
 
   deploy-proxy:
-    needs: [changes, resolve-colors, scale-inactive, deploy-api, deploy-web]
+    needs: [changes, resolve-colors, scale-inactive, sync-compose, deploy-api, deploy-web]
     if: |
       always()
       && needs.changes.outputs.proxy == 'true'
       && needs.scale-inactive.result == 'success'
+      && needs.sync-compose.result == 'success'
       && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
       && (needs.changes.outputs.web != 'true' || needs.deploy-web.result == 'success')
     runs-on: ubuntu-latest
@@ -469,13 +519,13 @@ jobs:
       - uses: actions/checkout@v7
         with:
           sparse-checkout: |
-            deploy
+            deploy/scripts
           sparse-checkout-cone-mode: true
 
       - name: Install jq
         run: sudo apt-get update && sudo apt-get install -y jq
 
-      - name: Sync compose + Caddyfile to inactive color
+      - name: Recreate Caddy on inactive color
         env:
           DIGITALOCEAN_TOKEN: ${{ secrets.DIGITALOCEAN_TOKEN }}
           DROPLET_USER: ${{ secrets.DROPLET_USER }}
@@ -484,23 +534,6 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x deploy/scripts/*.sh
-          KEY_PATH="$(mktemp)"
-          printf '%s\n' "$DROPLET_SSH_KEY" >"$KEY_PATH"
-          chmod 600 "$KEY_PATH"
-          mapfile -t HOSTS < <(./deploy/scripts/pool-hosts.sh)
-          if [[ "${#HOSTS[@]}" -eq 0 ]]; then
-            echo "No pool hosts for tag $POOL_TAG" >&2
-            exit 1
-          fi
-          for host in "${HOSTS[@]}"; do
-            echo "Syncing to $host"
-            scp -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=/dev/null -o IdentitiesOnly=yes \
-              -i "$KEY_PATH" \
-              deploy/docker-compose.yml deploy/Caddyfile \
-              "${DROPLET_USER}@${host}:/opt/sailing-plans/"
-          done
-          rm -f "$KEY_PATH"
-
           ./deploy/scripts/ssh-pool.sh -- "$(cat <<'EOF'
           set -euo pipefail
           cd /opt/sailing-plans
@@ -519,10 +552,11 @@ jobs:
           )"
 
   healthcheck-inactive:
-    needs: [changes, resolve-colors, scale-inactive, deploy-api, deploy-web, deploy-proxy]
+    needs: [changes, resolve-colors, scale-inactive, sync-compose, deploy-api, deploy-web, deploy-proxy]
     if: |
       always()
       && needs.scale-inactive.result == 'success'
+      && (needs.changes.outputs.proxy != 'true' || needs.sync-compose.result == 'success')
       && (needs.changes.outputs.api != 'true' || needs.deploy-api.result == 'success')
       && (needs.changes.outputs.web != 'true' || needs.deploy-web.result == 'success')
       && (needs.changes.outputs.proxy != 'true' || needs.deploy-proxy.result == 'success')
