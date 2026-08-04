@@ -1,7 +1,7 @@
 /** Shared DO-inspired dark field: glow, dot grid, wireframe topo mesh, scale. */
 
 type AtmosphereProps = {
-  variant?: 'auth' | 'dashboard';
+  variant?: 'auth' | 'dashboard' | 'marketing';
 };
 
 const SCALE_MARKS = [26, 50, 100, 200, 300, 400, 500, 600, 700];

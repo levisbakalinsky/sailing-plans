@@ -3,6 +3,7 @@ import { UserButton } from '@clerk/nextjs';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { Atmosphere } from '../../components/Atmosphere';
 import { LogoMark } from '../../components/Logo';
+import { clerkUserButtonAppearance } from '../../lib/clerkAppearance';
 
 function NavIconHome() {
   return (
@@ -70,27 +71,10 @@ export default async function DashboardPage() {
             <span className="dashboard-search-hint">⌘K</span>
           </div>
           <div className="dashboard-top-actions">
-            <a
-              className="dashboard-create"
-              href="mailto:hello@sailingplans.com?subject=Early%20access"
-            >
+            <span className="dashboard-create is-disabled" aria-disabled="true">
               Create
-            </a>
-            <UserButton
-              appearance={{
-                elements: {
-                  avatarBox: { width: '2rem', height: '2rem' },
-                  userButtonPopoverCard: {
-                    background: '#12141c',
-                    border: '1px solid #2a2d3a',
-                    color: '#f4f5f5',
-                  },
-                  userButtonPopoverActionButton: { color: '#e8eaed' },
-                  userButtonPopoverActionButtonText: { color: '#e8eaed' },
-                  userButtonPopoverFooter: { display: 'none' },
-                },
-              }}
-            />
+            </span>
+            <UserButton appearance={clerkUserButtonAppearance} />
           </div>
         </header>
 
@@ -105,12 +89,7 @@ export default async function DashboardPage() {
               dock.
             </p>
             <div className="dashboard-actions">
-              <a
-                className="dashboard-cta"
-                href="mailto:hello@sailingplans.com?subject=Early%20access"
-              >
-                Ask about early access
-              </a>
+              <span className="dashboard-cta">Plans coming soon</span>
               <Link className="dashboard-cta dashboard-cta-ghost" href="/">
                 View the site
               </Link>
