@@ -6,7 +6,13 @@ import { LogoMark } from './Logo';
 
 const YEAR = new Date().getFullYear();
 
-/** DigitalOcean-style marketing footer — real links only; honest pre-launch placeholders. */
+const LEGAL_LINKS = [
+  { href: '/privacy', label: 'Privacy' },
+  { href: '/terms', label: 'Terms' },
+  { href: '/cookies', label: 'Cookies' },
+] as const;
+
+/** DigitalOcean-style marketing footer — real destinations only. */
 export function SiteFooter() {
   return (
     <footer className="site-footer-band" aria-label="Site">
@@ -18,9 +24,11 @@ export function SiteFooter() {
           </Link>
 
           <nav className="site-footer-nav" aria-label="Footer">
-            <a href="#product">Product</a>
-            <a href="#company">Company</a>
-            <a href="#legal">Legal</a>
+            {LEGAL_LINKS.map((item) => (
+              <Link key={item.href} href={item.href}>
+                {item.label}
+              </Link>
+            ))}
           </nav>
 
           <div className="site-footer-auth">
@@ -45,7 +53,7 @@ export function SiteFooter() {
         </div>
 
         <div className="site-footer-columns">
-          <div className="site-footer-col" id="product">
+          <div className="site-footer-col">
             <h2 className="site-footer-heading">Product</h2>
             <ul className="site-footer-list">
               <li>
@@ -63,7 +71,7 @@ export function SiteFooter() {
             </ul>
           </div>
 
-          <div className="site-footer-col" id="company">
+          <div className="site-footer-col">
             <h2 className="site-footer-heading">Company</h2>
             <ul className="site-footer-list">
               <li>
@@ -80,18 +88,14 @@ export function SiteFooter() {
             </ul>
           </div>
 
-          <div className="site-footer-col" id="legal">
+          <div className="site-footer-col">
             <h2 className="site-footer-heading">Legal</h2>
             <ul className="site-footer-list">
-              <li>
-                <span className="site-footer-soon">Privacy — coming soon</span>
-              </li>
-              <li>
-                <span className="site-footer-soon">Security — coming soon</span>
-              </li>
-              <li>
-                <span className="site-footer-soon">Terms — coming soon</span>
-              </li>
+              {LEGAL_LINKS.map((item) => (
+                <li key={item.href}>
+                  <Link href={item.href}>{item.label}</Link>
+                </li>
+              ))}
             </ul>
           </div>
         </div>
