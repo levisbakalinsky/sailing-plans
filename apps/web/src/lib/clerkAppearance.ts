@@ -100,3 +100,58 @@ export const clerkAppearance = {
     },
   },
 } as const;
+
+/**
+ * Dark UserButton menu — console panel with readable white/grey text + teal accents.
+ * Pair with `.cl-userButton*` CSS overrides so portal content doesn't inherit body ink.
+ */
+export const clerkUserButtonAppearance = {
+  variables: {
+    colorPrimary: '#18c4d4',
+    colorText: '#f4f5f5',
+    colorTextSecondary: '#a8aebc',
+    colorBackground: '#12141c',
+    colorNeutral: '#f4f5f5',
+    colorInputBackground: '#1a1d27',
+    colorInputText: '#f4f5f5',
+    borderRadius: '10px',
+    fontFamily: 'var(--font-body), "Source Sans 3", sans-serif',
+  },
+  elements: {
+    avatarBox: {
+      width: '2rem',
+      height: '2rem',
+    },
+    userButtonPopoverCard: {
+      background: '#12141c',
+      border: '1px solid #2a2d3a',
+      boxShadow: '0 16px 40px rgba(0, 0, 0, 0.55)',
+      color: '#f4f5f5',
+    },
+    userButtonPopoverMain: {
+      background: '#12141c',
+      color: '#f4f5f5',
+    },
+    userButtonPopoverActions: {
+      background: '#12141c',
+    },
+    userButtonPopoverActionButton: {
+      color: '#f4f5f5',
+    },
+    userButtonPopoverActionButtonText: {
+      color: '#f4f5f5',
+    },
+    userButtonPopoverActionButtonIcon: {
+      color: '#a8aebc',
+    },
+    userPreviewMainIdentifier: {
+      color: '#f4f5f5',
+    },
+    userPreviewSecondaryIdentifier: {
+      color: '#a8aebc',
+    },
+    userButtonPopoverFooter: {
+      display: 'none',
+    },
+  },
+} as const;

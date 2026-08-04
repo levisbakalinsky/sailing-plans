@@ -60,72 +60,7 @@ a {
   width: 100%;
   display: flex;
   flex-direction: column;
-}
-
-.hero-media {
-  position: absolute;
-  inset: 0;
-  z-index: 0;
-}
-
-.hero-wash {
-  position: absolute;
-  inset: 0;
-  background:
-    radial-gradient(90% 70% at 85% 10%, rgba(113, 229, 242, 0.16), transparent 55%),
-    radial-gradient(70% 60% at 10% 90%, rgba(31, 64, 62, 0.9), transparent 50%),
-    linear-gradient(165deg, #000f0f 0%, #071616 45%, #102826 100%);
-  animation: wash-shift 22s ease-in-out infinite alternate;
-}
-
-.hero-glow {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(80px);
-  pointer-events: none;
-}
-
-.hero-glow-a {
-  width: min(58vw, 36rem);
-  height: min(58vw, 36rem);
-  top: -12%;
-  right: -8%;
-  background: rgba(113, 229, 242, 0.18);
-  animation: pulse-a 16s ease-in-out infinite alternate;
-}
-
-.hero-glow-b {
-  width: min(50vw, 28rem);
-  height: min(50vw, 28rem);
-  bottom: -18%;
-  left: -10%;
-  background: rgba(19, 48, 46, 0.95);
-  animation: pulse-b 20s ease-in-out infinite alternate;
-}
-
-.hero-horizon {
-  position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 32%;
-  height: 1px;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(113, 229, 242, 0.35) 35%,
-    rgba(113, 229, 242, 0.55) 50%,
-    rgba(113, 229, 242, 0.35) 65%,
-    transparent 100%
-  );
-  animation: horizon 10s ease-in-out infinite alternate;
-}
-
-.hero-grain {
-  position: absolute;
-  inset: 0;
-  opacity: 0.04;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  pointer-events: none;
+  background: var(--auth-field);
 }
 
 .hero-copy {
@@ -135,7 +70,10 @@ a {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  width: min(38rem, 100%);
+  align-items: center;
+  text-align: center;
+  width: min(42rem, 100%);
+  margin-inline: auto;
   padding: clamp(1.5rem, 5vw, 4.5rem);
   padding-bottom: 0.5rem;
   min-height: 0;
@@ -144,6 +82,7 @@ a {
 .hero-brand-row {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 0.85rem;
   margin-bottom: clamp(0.75rem, 2vh, 1.25rem);
   animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) both;
@@ -152,27 +91,28 @@ a {
 .hero-mark {
   width: clamp(2.1rem, 5vw, 2.75rem);
   height: clamp(2.1rem, 5vw, 2.75rem);
-  color: var(--foam);
+  color: var(--console-accent);
   flex-shrink: 0;
 }
 
 .eyebrow {
   margin: 0;
+  font-family: var(--font-mono), ui-monospace, monospace;
   font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.16em;
+  font-weight: 500;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--foam);
+  color: var(--console-accent);
 }
 
 .brand {
   margin: 0 0 clamp(0.65rem, 1.8vh, 1rem);
   font-family: var(--font-display), "Times New Roman", serif;
-  font-size: clamp(2.75rem, 8vw, 5.5rem);
+  font-size: clamp(3rem, 9vw, 5.75rem);
   font-weight: 500;
   letter-spacing: -0.03em;
   line-height: 0.95;
-  color: var(--ink);
+  color: #fff;
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.06s both;
 }
 
@@ -182,22 +122,22 @@ a {
 
 .headline {
   margin: 0 0 clamp(0.55rem, 1.5vh, 0.85rem);
-  max-width: 20ch;
+  max-width: 24ch;
   font-family: var(--font-body), "Helvetica Neue", Helvetica, sans-serif;
   font-size: clamp(1.15rem, 2.4vw, 1.55rem);
   font-weight: 400;
   letter-spacing: -0.015em;
   line-height: 1.3;
-  color: var(--ink-soft);
+  color: rgba(255, 255, 255, 0.88);
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.14s both;
 }
 
 .support {
   margin: 0 0 clamp(1.25rem, 3vh, 1.85rem);
-  max-width: 34ch;
+  max-width: 38ch;
   font-size: clamp(0.95rem, 1.8vw, 1.05rem);
   line-height: 1.55;
-  color: var(--ink-muted);
+  color: var(--console-muted);
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.22s both;
 }
 
@@ -205,6 +145,7 @@ a {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.75rem;
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.3s both;
 }
@@ -214,14 +155,15 @@ a {
   align-items: center;
   justify-content: center;
   min-height: 2.85rem;
-  padding: 0.7rem 1.4rem;
+  padding: 0.7rem 1.5rem;
   border: 1px solid transparent;
-  border-radius: 2px;
-  background: var(--foam);
-  color: var(--canvas);
+  border-radius: 999px;
+  background: var(--console-accent);
+  color: #001214;
   font-size: 0.95rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: -0.01em;
+  cursor: pointer;
   transition:
     transform 180ms ease,
     background-color 180ms ease,
@@ -230,25 +172,98 @@ a {
 }
 
 .cta:hover {
-  background: #9aeff7;
+  background: #4dd5e0;
   transform: translateY(-1px);
 }
 
 .cta-secondary {
   background: transparent;
-  border-color: rgba(113, 229, 242, 0.45);
-  color: var(--ink-soft);
+  border-color: rgba(255, 255, 255, 0.35);
+  color: #fff;
 }
 
 .cta-secondary:hover {
   background: transparent;
-  border-color: var(--foam);
-  color: var(--foam);
+  border-color: var(--console-accent);
+  color: var(--console-accent);
+}
+
+.hero-waitlist {
+  margin: 1.1rem 0 0;
+  font-size: 0.88rem;
+  color: var(--console-muted);
+  animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.38s both;
+}
+
+.hero-waitlist a {
+  color: var(--console-accent);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.hero-waitlist a:hover {
+  color: #4dd5e0;
 }
 
 .cta:focus-visible {
-  outline: 2px solid var(--foam);
+  outline: 2px solid var(--console-accent);
   outline-offset: 3px;
+}
+
+/* Clerk UserButton popover — dark console panel (beats body ink on light portal) */
+.cl-userButtonPopoverCard,
+.cl-userButtonPopoverMain,
+.cl-userButton-popover,
+[data-clerk-component="UserButton"] .cl-userButtonPopoverCard {
+  background: #12141c !important;
+  background-color: #12141c !important;
+  border: 1px solid #2a2d3a !important;
+  color: #f4f5f5 !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55) !important;
+}
+
+.cl-userButtonPopoverCard *,
+.cl-userButtonPopoverMain *,
+.cl-userButton-popover * {
+  color: inherit;
+}
+
+.cl-userButtonPopoverActionButton,
+.cl-userButtonPopoverActionButtonText,
+.cl-menuItem,
+.cl-userPreviewMainIdentifier,
+.cl-userPreviewMainIdentifierText,
+.cl-userPreview .cl-userPreviewMainIdentifier {
+  color: #f4f5f5 !important;
+}
+
+.cl-userButtonPopoverActionButtonIcon,
+.cl-userPreviewSecondaryIdentifier,
+.cl-userPreviewSecondaryIdentifierText,
+.cl-userPreview .cl-userPreviewSecondaryIdentifier {
+  color: #a8aebc !important;
+}
+
+.cl-userButtonPopoverActionButton:hover,
+.cl-menuItem:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.cl-userButtonPopoverActionButton:hover .cl-userButtonPopoverActionButtonText,
+.cl-menuButton__manageAccount,
+a.cl-userButtonPopoverActionButton[href*="account"] {
+  color: #f4f5f5 !important;
+}
+
+.cl-userButtonPopoverFooter,
+.cl-userButtonPopoverCustomItemButton__development {
+  display: none !important;
+}
+
+.cl-internal-icon,
+.cl-userButtonPopoverActionButton svg {
+  color: #a8aebc !important;
+  fill: currentColor;
 }
 
 .auth-user {
@@ -281,6 +296,10 @@ a {
   background: var(--console-canvas);
 }
 
+.atmosphere-marketing .atmosphere-field {
+  background: var(--auth-field);
+}
+
 .atmosphere-glow {
   position: absolute;
   inset: 0;
@@ -297,6 +316,21 @@ a {
       transparent 55%
     );
   animation: atmosphere-breathe 18s ease-in-out infinite alternate;
+}
+
+.atmosphere-marketing .atmosphere-glow {
+  background:
+    radial-gradient(
+      60% 48% at 50% 36%,
+      rgba(24, 196, 212, 0.22) 0%,
+      rgba(10, 50, 52, 0.35) 38%,
+      transparent 68%
+    ),
+    radial-gradient(
+      90% 55% at 50% 100%,
+      rgba(24, 196, 212, 0.12) 0%,
+      transparent 55%
+    );
 }
 
 .atmosphere-dots {
@@ -613,9 +647,15 @@ a {
   transition: background-color 160ms ease, transform 160ms ease;
 }
 
-.dashboard-create:hover {
+.dashboard-create:hover:not(.is-disabled) {
   background: #4dd5e0;
   transform: translateY(-1px);
+}
+
+.dashboard-create.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
 }
 
 .dashboard-canvas {
@@ -697,9 +737,13 @@ a {
   transition: background-color 160ms ease, transform 160ms ease;
 }
 
-.dashboard-cta:hover {
+a.dashboard-cta:hover {
   background: #4dd5e0;
   transform: translateY(-1px);
+}
+
+.dashboard-cta:not(a) {
+  cursor: default;
 }
 
 .dashboard-cta-ghost {
@@ -708,7 +752,7 @@ a {
   color: #fff;
 }
 
-.dashboard-cta-ghost:hover {
+a.dashboard-cta-ghost:hover {
   background: transparent;
   border-color: var(--console-accent);
   color: var(--console-accent);
@@ -778,21 +822,22 @@ a {
   align-items: center;
   gap: 1rem;
   flex-shrink: 0;
+  width: 100%;
   padding: 1rem clamp(1.5rem, 5vw, 4.5rem) clamp(1rem, 3vh, 1.75rem);
-  color: var(--ink-muted);
+  color: var(--console-muted);
   font-size: 0.82rem;
   letter-spacing: 0.01em;
 }
 
 .footer-mail {
-  color: var(--ink-muted);
+  color: var(--console-muted);
   border-bottom: 1px solid transparent;
   transition: color 180ms ease, border-color 180ms ease;
 }
 
 .footer-mail:hover {
-  color: var(--foam);
-  border-color: rgba(113, 229, 242, 0.45);
+  color: var(--console-accent);
+  border-color: rgba(24, 196, 212, 0.45);
 }
 
 @keyframes rise {
@@ -806,55 +851,13 @@ a {
   }
 }
 
-@keyframes wash-shift {
-  from {
-    filter: hue-rotate(0deg) brightness(1);
-  }
-  to {
-    filter: hue-rotate(8deg) brightness(1.05);
-  }
-}
-
-@keyframes pulse-a {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-    opacity: 0.5;
-  }
-  to {
-    transform: translate3d(-5%, 6%, 0) scale(1.1);
-    opacity: 0.9;
-  }
-}
-
-@keyframes pulse-b {
-  from {
-    transform: translate3d(0, 0, 0) scale(1);
-  }
-  to {
-    transform: translate3d(8%, -5%, 0) scale(1.12);
-  }
-}
-
-@keyframes horizon {
-  from {
-    opacity: 0.45;
-    transform: scaleX(0.92);
-  }
-  to {
-    opacity: 0.85;
-    transform: scaleX(1);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .eyebrow,
   .brand,
   .headline,
   .support,
   .cta-row,
-  .hero-glow,
-  .hero-wash,
-  .hero-horizon,
+  .hero-waitlist,
   .atmosphere-glow,
   .atmosphere-mesh,
   .auth-top,
