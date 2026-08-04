@@ -295,9 +295,9 @@ a {
   gap: 0.75rem;
 }
 
-/* —— Portal (signed-in home) —— */
+/* —— Dashboard (signed-in home) —— */
 
-.portal {
+.dashboard {
   position: relative;
   min-height: 100svh;
   min-height: 100dvh;
@@ -307,14 +307,14 @@ a {
   color: var(--ink);
 }
 
-.portal-backdrop {
+.dashboard-backdrop {
   position: absolute;
   inset: 0;
   z-index: 0;
   pointer-events: none;
 }
 
-.portal-field {
+.dashboard-field {
   position: absolute;
   inset: 0;
   background:
@@ -324,7 +324,7 @@ a {
 }
 
 /* Nautical chart: lat/long grid + soft rhumb arcs + compass ticks */
-.portal-pattern {
+.dashboard-pattern {
   position: absolute;
   inset: 0;
   opacity: 0.55;
@@ -345,13 +345,13 @@ a {
   animation: pattern-drift 36s ease-in-out infinite alternate;
 }
 
-.portal-glow {
+.dashboard-glow {
   position: absolute;
   border-radius: 50%;
   filter: blur(90px);
 }
 
-.portal-glow-a {
+.dashboard-glow-a {
   width: min(48vw, 28rem);
   height: min(48vw, 28rem);
   top: -10%;
@@ -360,7 +360,7 @@ a {
   animation: pulse-a 18s ease-in-out infinite alternate;
 }
 
-.portal-glow-b {
+.dashboard-glow-b {
   width: min(42vw, 24rem);
   height: min(42vw, 24rem);
   bottom: -16%;
@@ -369,14 +369,14 @@ a {
   animation: pulse-b 22s ease-in-out infinite alternate;
 }
 
-.portal-grain {
+.dashboard-grain {
   position: absolute;
   inset: 0;
   opacity: 0.035;
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.portal-bar {
+.dashboard-bar {
   position: relative;
   z-index: 1;
   display: flex;
@@ -390,7 +390,7 @@ a {
   animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.portal-brand-link {
+.dashboard-brand-link {
   display: inline-flex;
   align-items: center;
   gap: 0.7rem;
@@ -399,25 +399,25 @@ a {
   transition: color 180ms ease;
 }
 
-.portal-brand-link:hover {
+.dashboard-brand-link:hover {
   color: var(--foam);
 }
 
-.portal-bar-mark {
+.dashboard-bar-mark {
   width: 1.85rem;
   height: 1.85rem;
   color: var(--foam);
   flex-shrink: 0;
 }
 
-.portal-bar-word {
+.dashboard-bar-word {
   font-family: var(--font-display), "Times New Roman", serif;
   font-size: 1.15rem;
   font-weight: 500;
   letter-spacing: -0.02em;
 }
 
-.portal-stage {
+.dashboard-stage {
   position: relative;
   z-index: 1;
   flex: 1;
@@ -430,7 +430,7 @@ a {
   min-height: 0;
 }
 
-.portal-eyebrow {
+.dashboard-eyebrow {
   margin: 0 0 0.85rem;
   font-size: 0.72rem;
   font-weight: 600;
@@ -440,7 +440,7 @@ a {
   animation: rise 0.85s cubic-bezier(0.22, 1, 0.36, 1) 0.04s both;
 }
 
-.portal-brand {
+.dashboard-brand {
   margin: 0 0 0.85rem;
   font-family: var(--font-display), "Times New Roman", serif;
   font-size: clamp(2.6rem, 7vw, 4.75rem);
@@ -451,7 +451,7 @@ a {
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.08s both;
 }
 
-.portal-welcome {
+.dashboard-welcome {
   margin: 0 0 0.65rem;
   font-size: clamp(1.15rem, 2.4vw, 1.45rem);
   font-weight: 400;
@@ -461,7 +461,7 @@ a {
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.16s both;
 }
 
-.portal-support {
+.dashboard-support {
   margin: 0 0 1.75rem;
   max-width: 32ch;
   font-size: clamp(0.95rem, 1.8vw, 1.05rem);
@@ -470,7 +470,7 @@ a {
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.24s both;
 }
 
-.portal-actions {
+.dashboard-actions {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
@@ -479,7 +479,7 @@ a {
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.32s both;
 }
 
-.portal-status {
+.dashboard-status {
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
@@ -493,7 +493,7 @@ a {
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both;
 }
 
-.portal-status-dot {
+.dashboard-status-dot {
   width: 0.45rem;
   height: 0.45rem;
   border-radius: 50%;
@@ -610,16 +610,16 @@ a {
   .hero-glow,
   .hero-wash,
   .hero-horizon,
-  .portal-bar,
-  .portal-eyebrow,
-  .portal-brand,
-  .portal-welcome,
-  .portal-support,
-  .portal-actions,
-  .portal-status,
-  .portal-status-dot,
-  .portal-glow,
-  .portal-pattern {
+  .dashboard-bar,
+  .dashboard-eyebrow,
+  .dashboard-brand,
+  .dashboard-welcome,
+  .dashboard-support,
+  .dashboard-actions,
+  .dashboard-status,
+  .dashboard-status-dot,
+  .dashboard-glow,
+  .dashboard-pattern {
     animation: none !important;
   }
 }
@@ -631,7 +631,7 @@ a {
     gap: 0.35rem;
   }
 
-  .portal-bar-word {
+  .dashboard-bar-word {
     font-size: 1.05rem;
   }
 
