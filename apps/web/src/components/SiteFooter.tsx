@@ -28,14 +28,6 @@ export function SiteFooter() {
             <span className="site-footer-brand-word">Sailing Plans</span>
           </Link>
 
-          <nav className="site-footer-nav" aria-label="Footer">
-            {LEGAL_LINKS.map((item) => (
-              <Link key={item.href} href={item.href}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
-
           <div className="site-footer-auth">
             <Show when="signed-out">
               <SignInButton mode="redirect" forceRedirectUrl="/dashboard">

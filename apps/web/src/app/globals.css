@@ -1131,20 +1131,6 @@ a.dashboard-cta-ghost:hover {
   letter-spacing: -0.01em;
 }
 
-.site-footer-nav {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1.35rem;
-  font-size: 0.92rem;
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.88);
-}
-
-.site-footer-nav a:hover {
-  color: var(--console-accent);
-}
-
 .site-footer-auth {
   display: inline-flex;
   align-items: center;
@@ -1342,11 +1328,6 @@ a.dashboard-cta-ghost:hover {
 
   .site-footer-columns {
     grid-template-columns: 1fr 1fr;
-  }
-
-  .site-footer-nav {
-    order: 3;
-    width: 100%;
   }
 
   .site-footer-auth {
