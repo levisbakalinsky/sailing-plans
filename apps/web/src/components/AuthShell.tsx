@@ -1,11 +1,17 @@
 import Link from 'next/link';
-import { SignIn } from '@clerk/nextjs';
-import { LogoMark } from '../../components/Logo';
+import type { ReactNode } from 'react';
+import { LogoMark } from './Logo';
 
-export default function LoginPage() {
+type AuthShellProps = {
+  eyebrow: string;
+  children: ReactNode;
+};
+
+/** Shared branded chrome for Clerk sign-in / sign-up pages. */
+export function AuthShell({ eyebrow, children }: AuthShellProps) {
   return (
     <main className="shell">
-      <section className="hero" aria-label="Log in">
+      <section className="hero" aria-label={eyebrow}>
         <div className="hero-media" aria-hidden="true">
           <div className="hero-wash" />
           <div className="hero-glow hero-glow-a" />
@@ -17,22 +23,9 @@ export default function LoginPage() {
         <div className="hero-copy hero-copy-auth">
           <div className="hero-brand-row">
             <LogoMark className="hero-mark" title="Sailing Plans" />
-            <p className="eyebrow">Log in</p>
+            <p className="eyebrow">{eyebrow}</p>
           </div>
-          <div className="clerk-frame">
-            <SignIn
-              routing="hash"
-              fallbackRedirectUrl="/"
-              signUpUrl="/login"
-              appearance={{
-                variables: {
-                  colorPrimary: '#71e5f2',
-                  colorBackground: '#0c1f1e',
-                  borderRadius: '2px',
-                },
-              }}
-            />
-          </div>
+          <div className="clerk-frame">{children}</div>
           <p className="auth-back">
             <Link href="/">Back home</Link>
           </p>

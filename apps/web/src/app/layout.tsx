@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import { ClerkProvider } from '@clerk/nextjs';
 import { EB_Garamond, Source_Sans_3 } from 'next/font/google';
+import { clerkAppearance } from '../lib/clerkAppearance';
 import './globals.css';
 
 const display = EB_Garamond({
@@ -23,7 +24,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${display.variable} ${body.variable}`}>
       <body>
-        <ClerkProvider>{children}</ClerkProvider>
+        <ClerkProvider appearance={clerkAppearance}>{children}</ClerkProvider>
       </body>
     </html>
   );

@@ -245,11 +245,24 @@ a {
 .clerk-frame {
   margin: 0.25rem 0 1rem;
   animation: rise 0.9s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+  color: #15201f;
 }
 
 .clerk-frame .cl-rootBox,
+.clerk-frame .cl-cardBox,
 .clerk-frame .cl-card {
   margin: 0;
+  width: 100%;
+}
+
+/* Belt-and-suspenders: Clerk footer sits under the card; keep it on the light surface. */
+.clerk-frame .cl-cardBox {
+  background: #f4f7f6;
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.35);
+}
+
+.clerk-frame .cl-footer {
+  background: #eef3f2;
 }
 
 .auth-back {
