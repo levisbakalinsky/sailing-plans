@@ -1237,13 +1237,13 @@ a.dashboard-cta-ghost:hover {
     display: block;
   }
 
-  .site-footer-columns {
+  .site-footer-columns:not(.site-footer-columns-legal) {
     grid-template-columns: 1fr 1fr;
   }
 }
 
 @media (max-width: 640px) {
-  .site-footer-columns {
+  .site-footer-columns:not(.site-footer-columns-legal) {
     grid-template-columns: 1fr;
   }
 
