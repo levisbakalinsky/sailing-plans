@@ -9,8 +9,8 @@ export default function LoginPage() {
         routing="path"
         path="/login"
         signUpUrl="/sign-up"
-        fallbackRedirectUrl="/"
-        forceRedirectUrl="/"
+        fallbackRedirectUrl="/portal"
+        forceRedirectUrl="/portal"
         appearance={clerkAppearance}
       />
     </AuthShell>
