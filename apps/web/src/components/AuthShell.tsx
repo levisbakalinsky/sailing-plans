@@ -1,45 +1,43 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
+import { Atmosphere } from './Atmosphere';
 import { LogoMark } from './Logo';
 
 type AuthShellProps = {
-  eyebrow: string;
+  mode: 'login' | 'sign-up';
   children: ReactNode;
 };
 
-/** Shared branded chrome for Clerk sign-in / sign-up pages. */
-export function AuthShell({ eyebrow, children }: AuthShellProps) {
+/** Shared branded chrome for all Clerk auth screens (sign-in, sign-up, reset). */
+export function AuthShell({ mode, children }: AuthShellProps) {
+  const switchLink =
+    mode === 'login' ? (
+      <p className="auth-switch">
+        Don&apos;t have an account?{' '}
+        <Link href="/sign-up">Sign up</Link>
+      </p>
+    ) : (
+      <p className="auth-switch">
+        Already have an account?{' '}
+        <Link href="/login">Sign in</Link>
+      </p>
+    );
+
   return (
-    <main className="shell">
-      <section className="hero" aria-label={eyebrow}>
-        <div className="hero-media" aria-hidden="true">
-          <div className="hero-wash" />
-          <div className="hero-glow hero-glow-a" />
-          <div className="hero-glow hero-glow-b" />
-          <div className="hero-horizon" />
-          <div className="hero-grain" />
-        </div>
+    <main className="auth-shell">
+      <Atmosphere variant="auth" />
 
-        <div className="hero-copy hero-copy-auth">
-          <div className="hero-brand-row">
-            <LogoMark className="hero-mark" title="Sailing Plans" />
-            <p className="eyebrow">{eyebrow}</p>
-          </div>
-          <div className="clerk-frame">{children}</div>
-          <p className="auth-back">
-            <Link href="/">Back home</Link>
-          </p>
-        </div>
+      <header className="auth-top">
+        <Link href="/" className="auth-brand" aria-label="Sailing Plans home">
+          <LogoMark className="auth-brand-mark" title="Sailing Plans" />
+          <span className="auth-brand-word">Sailing Plans</span>
+        </Link>
+        {switchLink}
+      </header>
 
-        <footer className="site-footer">
-          <span className="footer-meta">
-            © {new Date().getFullYear()} Avena Services, LLC
-          </span>
-          <a className="footer-mail" href="mailto:hello@sailingplans.com">
-            hello@sailingplans.com
-          </a>
-        </footer>
-      </section>
+      <div className="auth-stage">
+        <div className="clerk-frame">{children}</div>
+      </div>
     </main>
   );
 }
