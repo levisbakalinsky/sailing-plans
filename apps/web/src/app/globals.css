@@ -1102,86 +1102,11 @@ a.dashboard-cta-ghost:hover {
     clamp(1.5rem, 3vw, 2.25rem);
 }
 
-.site-footer-top {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.25rem 1.75rem;
-  padding-bottom: clamp(1.75rem, 3.5vw, 2.5rem);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.site-footer-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.7rem;
-  color: #fff;
-}
-
-.site-footer-brand-mark {
-  width: 1.75rem;
-  height: 1.75rem;
-  color: var(--console-accent);
-}
-
-.site-footer-brand-word {
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-}
-
-.site-footer-auth {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.85rem;
-  margin-left: auto;
-}
-
-.site-footer-login {
-  appearance: none;
-  border: 0;
-  background: transparent;
-  color: #fff;
-  font: inherit;
-  font-size: 0.92rem;
-  font-weight: 500;
-  cursor: pointer;
-  padding: 0;
-}
-
-.site-footer-login:hover {
-  color: var(--console-accent);
-}
-
-.site-footer-signup {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.35rem;
-  padding: 0.45rem 1.15rem;
-  border: 0;
-  border-radius: 999px;
-  background: var(--console-accent);
-  color: #001214;
-  font: inherit;
-  font-size: 0.9rem;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-  cursor: pointer;
-  transition: background-color 180ms ease, transform 180ms ease;
-}
-
-.site-footer-signup:hover {
-  background: #4dd5e0;
-  transform: translateY(-1px);
-}
-
 .site-footer-columns {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: clamp(1.75rem, 4vw, 3rem);
-  padding: clamp(2.25rem, 5vw, 3.5rem) 0;
+  padding: 0 0 clamp(2.25rem, 5vw, 3.5rem);
 }
 
 .site-footer-heading {
@@ -1329,20 +1254,11 @@ a.dashboard-cta-ghost:hover {
   .site-footer-columns {
     grid-template-columns: 1fr 1fr;
   }
-
-  .site-footer-auth {
-    margin-left: 0;
-  }
 }
 
 @media (max-width: 640px) {
   .site-footer-columns {
     grid-template-columns: 1fr;
-  }
-
-  .site-footer-top {
-    flex-direction: column;
-    align-items: flex-start;
   }
 
   .auth-user-signed-in {
