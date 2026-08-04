@@ -11,9 +11,9 @@ export default function HomePage() {
         <div className="hero-copy">
           <div className="hero-brand-row">
             <LogoMark className="hero-mark" title="Sailing Plans" />
-            <p className="eyebrow">Coming soon</p>
           </div>
           <h1 className="brand">Sailing Plans</h1>
+          <p className="eyebrow hero-eyebrow">Coming soon</p>
           <p className="headline">Plans that hold when the day gets loud.</p>
           <p className="support">
             A quiet place to capture what matters, choose the next step, and

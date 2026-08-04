@@ -24,6 +24,10 @@ const mono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: 'Sailing Plans',
   description: 'Plans that hold when the day gets loud.',
+  icons: {
+    icon: [{ url: '/brand/mark.svg', type: 'image/svg+xml' }],
+    apple: [{ url: '/brand/mark.svg' }],
+  },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
