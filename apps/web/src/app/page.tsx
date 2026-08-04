@@ -3,6 +3,7 @@ import { AuthCta } from '../components/AuthCta';
 import { LogoMark } from '../components/Logo';
 import { SiteFooter } from '../components/SiteFooter';
 import { SiteHeader } from '../components/SiteHeader';
+import { SALES_EMAIL } from '../lib/company';
 
 export default function HomePage() {
   return (
@@ -27,7 +28,7 @@ export default function HomePage() {
           </div>
           <p className="hero-waitlist">
             Prefer email?{' '}
-            <a href="mailto:hello@sailingplans.com?subject=Waitlist">
+            <a href={`mailto:${SALES_EMAIL}?subject=Waitlist`}>
               Join the waitlist
             </a>
           </p>

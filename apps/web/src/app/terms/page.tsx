@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { LegalPage } from '../../components/LegalPage';
 import {
   COMPANY_NAME,
-  CONTACT_EMAIL,
+  LEGAL_EMAIL,
   MAILING_ADDRESS_LINES,
 } from '../../lib/company';
 
@@ -14,7 +14,7 @@ export const metadata: Metadata = {
 };
 
 const UPDATED = 'August 4, 2026';
-const CONTACT = CONTACT_EMAIL;
+const CONTACT = LEGAL_EMAIL;
 
 export default function TermsPage() {
   return (

@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { Show, SignInButton, SignUpButton } from '@clerk/nextjs';
 import {
   COMPANY_NAME,
-  CONTACT_EMAIL,
   MAILING_ADDRESS_LINES,
+  SALES_EMAIL,
 } from '../lib/company';
 import { LogoMark } from './Logo';
 
@@ -90,10 +90,10 @@ export function SiteFooter() {
                 </address>
               </li>
               <li>
-                <a href={`mailto:${CONTACT_EMAIL}`}>Contact</a>
+                <a href={`mailto:${SALES_EMAIL}`}>Contact</a>
               </li>
               <li>
-                <a href={`mailto:${CONTACT_EMAIL}?subject=Waitlist`}>
+                <a href={`mailto:${SALES_EMAIL}?subject=Waitlist`}>
                   Waitlist
                 </a>
               </li>
